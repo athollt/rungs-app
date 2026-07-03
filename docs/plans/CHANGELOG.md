@@ -2320,3 +2320,88 @@ regardless of its name).
 - `npm run build` ✅. `npm run test`: **235/235** ✅. No route change → no new E2E.
 - `AGENT-NOTES.md` line 9 still says the infra rename is "(pending)" — stale after step 25,
   but outside this step's rename map; left untouched per AGENTS.md §4 (flagged, not fixed).
+
+---
+
+## Step 27 — Session intake deepening
+
+**Date**: 2026-07-03
+
+### Delivered
+
+- **`lib/session-intake.ts`** — new pure module unifying the submit and edit
+  intake paths. `intakeSession(input, store)` resolves on-the-fly names via
+  `resolvePlayerName` (reusing existing players case-insensitively — the
+  duplicate-Player fix), validates via `validateSession`, persists (create or
+  replace), and triggers a full per-league recalc via `runRecalculation`. One
+  function, two call sites (submit + edit). `deleteSession` stays separate (it
+  neither resolves nor validates).
+  - `SessionIntakeStore` port: combines `PlayerStore` (findByName, create),
+    `SessionWriteStore` (createSession, replaceSession), and `RecalcStore`.
+  - `SessionWriteStore` port: `createSession` (insert Session + SessionPlayers)
+    and `replaceSession` (delete old SessionPlayers + insert new).
+  - `IntakeSlot` / `SessionIntakeInput` / `IntakeResult` types.
+- **`lib/session-write-store.ts`** — Prisma-backed `SessionWriteStore` adapter
+  (`prismaSessionWriteStore`) + `makePrismaSessionIntakeStore(leagueId)` factory
+  that composes the per-League PlayerStore, the session write store, and the
+  shared recalc store into one `SessionIntakeStore`.
+- **`lib/league-access.ts`** — extracted `resolveScorerContext(slug)`: a pure,
+  non-throwing resolver returning `{ ok: true; league; userId; role }` or
+  `{ ok: false; error }`. Resolves league by slug, checks auth, checks the
+  scorer grant with admin bypass (ADR-012). `requireLeagueScorer` is now a thin
+  redirecting adapter over it (page callers unchanged). Server Actions call
+  `resolveScorerContext` directly and return `{ ok: false; error }` on failure
+  — no redirect mismatch.
+- **`lib/players.ts`** — narrowed `resolvePlayerName`'s store param to
+  `PlayerNameResolver` (Pick of findByName + create) so `SessionIntakeStore`
+  can call it without implementing the full `PlayerStore`. Backwards-compatible
+  (a full `PlayerStore` still satisfies the narrower type).
+- **`app/l/[slug]/submit/actions.ts`** — refactored to call `resolveScorerContext`
+  + `intakeSession({ mode: "create" })`. Dropped the inline player resolution,
+  validation, `prisma.session.create`, and `runRecalculation` calls.
+- **`app/l/[slug]/sessions/[id]/edit/actions.ts`** — refactored `updateSessionAction`
+  to call `resolveScorerContext` + `canMutateSession` + `intakeSession({ mode:
+  "update" })`. Deleted the hand-rolled `authoriseFor` (replaced by
+  `resolveScorerContext` + `canMutateSession`) and the direct `prisma.player.create`
+  (replaced by `resolvePlayerName` inside `intakeSession`). `deleteSessionAction`
+  now uses `resolveScorerContext` + `canMutateSession` too.
+- **Tests:** `lib/session-intake.test.ts` (5) — create all-existing, create new
+  name, update reuses existing on name match (duplicate-Player regression),
+  update replaces all players, invalid session returns error without persisting.
+  `lib/league-access.test.ts` (9) — `resolveScorerContext` ok/error/admin-
+  bypass/unknown-slug/unauthenticated + `requireLeagueScorer` redirect/notFound
+  adapter behaviours.
+- **E2E:** `e2e/session-edit.spec.ts` (+1) — editing a session and adding a new
+  on-the-fly player creates it exactly once (no duplicate row on the admin
+  players list).
+
+### Deviations / notes
+
+- **The "type an existing player name as + New" E2E scenario is not reachable
+  via the UI.** `SessionForm`'s `confirmNewChip` blocks a "+ New" name that
+  matches the roster (case-insensitive), and the edit page passes all league
+  players as the roster. The duplicate-Player bug was only reachable via a race
+  (player created between page load and submit) or a forged action call. The
+  reuse-on-match regression is therefore covered by the `intakeSession` unit
+  test (behaviour 3), which directly asserts `resolvePlayerName` is called. The
+  E2E verifies the unified edit → `intakeSession` → player-creation path works
+  without duplication.
+- **`replaceSession` preserves the original submitter.** The edit path does not
+  reassign ownership — `submittedById` is not updated on edit (matching the
+  prior edit action; an editor is not the submitter). `intakeSession` receives
+  `submittedById` for the create path only.
+- **`prismaSessionWriteStore` re-validates inside each method.** `intakeSession`
+  validates before persisting, but the adapter derives `totalPlayerWins` /
+  `inferredGames` / `playerCount` from `validateSession` output (the pure
+  function is the single source of those derived fields), so it re-runs
+  validation to get them. A double validation is cheap and keeps the adapter
+  self-contained.
+
+### Validation
+
+- `npm run build` — ✅ zero errors/warnings
+- `npm run test` — ✅ 249/249 unit tests pass (+5 session-intake, +9
+  league-access; 235 prior)
+- `npx playwright test e2e/session-edit.spec.ts` — ✅ 5/5 pass (+1 duplicate-fix
+  regression)
+
