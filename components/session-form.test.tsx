@@ -339,3 +339,116 @@ describe("SessionForm WhatsApp share (step 16.4)", () => {
     expect(screen.queryByText(/session logged/i)).toBeNull();
   });
 });
+
+describe("SessionForm draft autosave (step 28)", () => {
+  const SLUG = "test-league";
+  const KEY = `rungs-draft-${SLUG}`;
+
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  afterEach(() => {
+    localStorage.clear();
+  });
+
+  it("autosaves entries + notes to localStorage on change (submit mode)", () => {
+    render(
+      <SessionForm
+        players={PLAYERS}
+        submitLabel="Log Results"
+        ladderUrl="https://squash.example/"
+        slug={SLUG}
+        onSubmit={noop}
+      />,
+    );
+
+    // Selecting a player adds an entry -> the autosave effect fires.
+    fireEvent.click(chip("Alice"));
+    const draft = JSON.parse(localStorage.getItem(KEY) ?? "null");
+    expect(draft).not.toBeNull();
+    expect(draft.entries).toHaveLength(1);
+    expect(draft.entries[0]).toMatchObject({ playerId: "p1", wins: "0" });
+    expect(draft.notes).toBe("");
+
+    // Changing notes is persisted too.
+    fireEvent.change(screen.getByLabelText("Notes"), {
+      target: { value: "Tight games" },
+    });
+    const draft2 = JSON.parse(localStorage.getItem(KEY) ?? "null");
+    expect(draft2.notes).toBe("Tight games");
+  });
+
+  it("restores entries + notes from localStorage on mount (submit mode)", async () => {
+    localStorage.setItem(
+      KEY,
+      JSON.stringify({
+        entries: [{ key: 0, playerId: "p1", newName: "", wins: "3" }],
+        notes: "Restored note",
+      }),
+    );
+
+    render(
+      <SessionForm
+        players={PLAYERS}
+        submitLabel="Log Results"
+        ladderUrl="https://squash.example/"
+        slug={SLUG}
+        onSubmit={noop}
+      />,
+    );
+
+    // The restore runs in a mount effect (post-hydration), so wait for it.
+    const block = await screen.findByRole("group", { name: "Alice" });
+    expect(
+      within(block).getByRole("button", { name: "3 wins" }),
+    ).toHaveAttribute("aria-pressed", "true");
+    expect(chip("Alice")).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByLabelText("Notes")).toHaveValue("Restored note");
+  });
+
+  it("clears localStorage on a successful submit (submit mode)", async () => {
+    render(
+      <SessionForm
+        players={PLAYERS}
+        submitLabel="Log Results"
+        ladderUrl="https://squash.example/"
+        slug={SLUG}
+        onSubmit={noop}
+      />,
+    );
+
+    fireEvent.click(chip("Alice"));
+    fireEvent.click(
+      within(screen.getByRole("group", { name: "Alice" })).getByRole("button", {
+        name: "3 wins",
+      }),
+    );
+    expect(localStorage.getItem(KEY)).not.toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Log Results" }));
+    await screen.findByText(/session logged/i);
+    expect(localStorage.getItem(KEY)).toBeNull();
+  });
+
+  it("does NOT autosave in edit mode (initialSlots present)", () => {
+    render(
+      <SessionForm
+        players={PLAYERS}
+        initialSlots={[{ playerId: "p1", newName: "", wins: "3" }]}
+        submitLabel="Save"
+        slug={SLUG}
+        onSubmit={noop}
+        onDelete={noop}
+      />,
+    );
+
+    // Change the wins on the pre-populated slot.
+    fireEvent.click(
+      within(screen.getByRole("group", { name: "Alice" })).getByRole("button", {
+        name: "5 wins",
+      }),
+    );
+    expect(localStorage.getItem(KEY)).toBeNull();
+  });
+});

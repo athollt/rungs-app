@@ -2405,3 +2405,55 @@ regardless of its name).
 - `npx playwright test e2e/session-edit.spec.ts` — ✅ 5/5 pass (+1 duplicate-fix
   regression)
 
+
+## Step 28 — Share from session history + draft autosave
+
+**Delivered:**
+- `components/share-button.tsx` — new client `ShareButton` component with the
+  same Web Share API + `pointer: coarse` gate as the post-submit success screen
+  (ADR-009). The `canShare` check is deferred to a mount effect so the server
+  renders `null` and the first client render matches (no hydration mismatch).
+  Reuses `buildShareText` from `lib/share.ts`.
+- `app/l/[slug]/sessions/page.tsx` — `ShareButton` added to each session history
+  card, passing the roster (mapped to `ShareRosterEntry[]`) + `ladderUrlForSlug`.
+- `components/session-form.tsx` — draft autosave in submit mode: entries + notes
+  are persisted to `localStorage` keyed by `rungs-draft-{slug}` on every change.
+  A saved draft is restored on mount (in a mount effect, post-hydration, to
+  avoid a hydration mismatch). The draft is cleared on a successful submit. An
+  `autosaveSkip` ref guards the first mount so the autosave effect doesn't
+  clobber the saved draft before the restore effect reads it. Edit mode
+  (`initialSlots` present) never reads or writes a draft.
+- `app/l/[slug]/submit/page.tsx` — passes `slug` to `SessionForm`.
+- `docs/plans/DECISIONS.md` — ADR-016 appended (extends ADR-009).
+
+**Tests:**
+- `components/share-button.test.tsx` — 5 tests: renders on touch, hidden on
+  desktop, hidden without Web Share API, share text correctness, notes in share
+  text.
+- `components/session-form.test.tsx` — +4 tests: autosaves on change, restores
+  on mount, clears on submit, no autosave in edit mode.
+- `e2e/session-history.spec.ts` — +1 test: touch device shows Share button on a
+  history card and tapping it calls `navigator.share` with the roster + ladder
+  link.
+- `e2e/submit.spec.ts` — +1 test: draft entries survive a page reload and are
+  cleared after a successful submit.
+
+**Deviations from spec:**
+- The spec's draft restore was initially in `useState` initializers (reading
+  `localStorage` during render). This caused a hydration mismatch (server
+  renders an empty form, client restores the draft). Moved to a mount `useEffect`
+  — the standard hydration-safe pattern for client-only persisted state. The
+  `ShareButton`'s `canShare` check was similarly deferred to a mount effect for
+  the same reason.
+- An `autosaveSkip` ref was added to skip the autosave effect's first mount run,
+  preventing it from overwriting the saved draft with empty entries before the
+  restore effect reads it. This is an implementation detail not in the spec but
+  necessary for the restore + autosave effects to coexist correctly.
+
+### Validation
+
+- `npm run build` — ✅ zero errors/warnings
+- `npm run test` — ✅ 258/258 unit tests pass (+5 share-button, +4 autosave;
+  249 prior)
+- `npm run test:e2e` — ✅ 58/58 pass (+1 share-from-history, +1 draft autosave)
+

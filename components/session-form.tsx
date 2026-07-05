@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -51,6 +51,54 @@ interface Props {
   // Where to go after a successful submit/delete (the league's ladder). Defaults
   // to "/" for callers that don't set it (e.g. edit pages bind their own).
   ladderHref?: string;
+  // Submit mode only: the league slug, used as the localStorage draft key so a
+  // courtside scorer's in-progress entries survive an app close mid-capture.
+  // Edit mode omits it (the form loads from the DB, not a draft).
+  slug?: string;
+}
+
+// Draft autosave (step 28): submit-mode entries + notes are persisted to
+// localStorage under `rungs-draft-{slug}` so a courtside scorer doesn't lose
+// data if the app closes mid-capture. Restored on mount, cleared on submit.
+// Edit mode never reads or writes a draft (it loads from the DB).
+interface Draft {
+  entries: Entry[];
+  notes: string;
+}
+
+function draftKey(slug: string): string {
+  return `rungs-draft-${slug}`;
+}
+
+function readDraft(slug: string): Draft | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(draftKey(slug));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Draft;
+    if (!Array.isArray(parsed.entries)) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function writeDraft(slug: string, draft: Draft): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(draftKey(slug), JSON.stringify(draft));
+  } catch {
+    // Quota / privacy mode — autosave is best-effort; swallow.
+  }
+}
+
+function clearDraft(slug: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.removeItem(draftKey(slug));
+  } catch {
+    // Swallow — best-effort.
+  }
 }
 
 // Courtside doubles capture (step 16.2, rev. single-grid): one "Choose players"
@@ -69,19 +117,27 @@ export function SessionForm({
   onDelete,
   ladderUrl,
   ladderHref = "/",
+  slug,
 }: Props) {
   const router = useRouter();
+  // Submit mode = no initialSlots. State initializers match the server render
+  // (empty in submit mode) to avoid a hydration mismatch — localStorage is
+  // only available on the client, so the draft is restored in a mount effect
+  // below, not in the initializers. Edit mode pre-populates from the DB.
   const [entries, setEntries] = useState<Entry[]>(() =>
-    (initialSlots ?? []).map((s, i) => ({
-      key: i,
-      playerId: s.playerId,
-      newName: s.newName,
-      wins: s.wins,
-    })),
+    initialSlots
+      ? initialSlots.map((s, i) => ({
+          key: i,
+          playerId: s.playerId,
+          newName: s.newName,
+          wins: s.wins,
+        }))
+      : [],
   );
   // Monotonic key source for entries added after mount; seeded past the initial
-  // entries' indices. Only touched in event handlers, never during render.
-  const keySeq = useRef((initialSlots?.length ?? 0));
+  // entries' indices. The draft-restore effect bumps this past the restored
+  // max key. Only touched in event handlers/effects, never during render.
+  const keySeq = useRef(initialSlots ? initialSlots.length : 0);
   const nextKey = () => keySeq.current++;
   const [notes, setNotes] = useState(initialNotes);
   const [error, setError] = useState<string | null>(null);
@@ -97,6 +153,42 @@ export function SessionForm({
   // Guards against a second navigator.share() call while one is still pending
   // (the API throws InvalidStateError otherwise).
   const sharing = useRef(false);
+  // Skips the autosave on the very first mount so it doesn't overwrite the
+  // saved draft with empty entries before the restore effect (below) reads it.
+  const autosaveSkip = useRef(true);
+
+  // Autosave (submit mode only): persist entries + notes to localStorage on every
+  // change so a courtside scorer doesn't lose data if the app closes mid-capture.
+  // Edit mode (initialSlots present) loads from the DB and never writes a draft.
+  // The first mount run is skipped (autosaveSkip) to let the restore effect read
+  // the existing draft first; subsequent changes persist normally.
+  useEffect(() => {
+    if (initialSlots || !slug) return;
+    if (autosaveSkip.current) {
+      autosaveSkip.current = false;
+      return;
+    }
+    writeDraft(slug, { entries, notes });
+  }, [entries, notes, initialSlots, slug]);
+
+  // Draft restore (submit mode only, once on mount): read the saved draft from
+  // localStorage and apply it. This runs after hydration so the server-rendered
+  // HTML (empty form) matches the first client render - no hydration mismatch.
+  // The autosave effect above then keeps the draft in sync from here on.
+  useEffect(() => {
+    if (initialSlots || !slug) return;
+    const draft = readDraft(slug);
+    if (!draft) return;
+    setEntries(draft.entries);
+    setNotes(draft.notes);
+    keySeq.current =
+      draft.entries.length > 0
+        ? Math.max(...draft.entries.map((e) => e.key)) + 1
+        : 0;
+    // Run once on mount only - reading the draft again on every entries/notes
+    // change would clobber the user's in-progress edits.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const selectedIds = new Set(
     entries.filter((e) => e.playerId !== NEW).map((e) => e.playerId),
@@ -187,6 +279,7 @@ export function SessionForm({
         setShareText(
           buildShareText({ roster: shareRoster(), ladderUrl, notes }),
         );
+        if (slug) clearDraft(slug);
       } else {
         router.push(ladderHref);
       }
