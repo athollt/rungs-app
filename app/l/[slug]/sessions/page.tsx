@@ -5,8 +5,10 @@ import { leagueBySlug } from "@/lib/league";
 import { leaguePageTitle } from "@/lib/page-title";
 import { resolveLeagueOr404 } from "@/lib/league-access";
 import { formatSessionDate } from "@/lib/session-history";
+import { ladderUrlForSlug } from "@/lib/share";
 import { PageShell } from "@/components/ui/page-shell";
 import { Card } from "@/components/ui/card";
+import { ShareButton } from "@/components/share-button";
 
 // Title leads with the brand, then the league (step 24): "Rungs - {displayName}".
 export async function generateMetadata({
@@ -74,12 +76,21 @@ export default async function SessionsPage({
                     </li>
                   ))}
                 </ul>
-                <Link
-                  href={`/l/${slug}/sessions/${s.id}`}
-                  className="text-primary mt-2 inline-block text-sm hover:underline"
-                >
-                  More details →
-                </Link>
+                <div className="mt-2 flex items-center gap-2">
+                  <Link
+                    href={`/l/${slug}/sessions/${s.id}`}
+                    className="text-primary inline-block text-sm hover:underline"
+                  >
+                    More details →
+                  </Link>
+                  <ShareButton
+                    roster={s.sessionPlayers.map((sp) => ({
+                      name: sp.player.name,
+                      wins: sp.wins,
+                    }))}
+                    ladderUrl={ladderUrlForSlug(slug)}
+                  />
+                </div>
               </Card>
             </li>
           ))}

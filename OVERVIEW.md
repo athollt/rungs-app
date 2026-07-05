@@ -1,7 +1,7 @@
 # OVERVIEW — rungs-app
 
-Architecture and internals of **Rungs** — a multi-tenant ranking-ladder platform (the repo
-name predates the rebrand). For *running* the app (setup, dev, tests, deploy) see
+Architecture and internals of **Rungs** — a multi-tenant ranking-ladder platform. For
+*running* the app (setup, dev, tests, deploy) see
 [`README.md`](README.md); this doc is the map of *how it is built*.
 
 ## Purpose
@@ -18,8 +18,8 @@ can request scoring access in-app ([ADR-014](docs/plans/DECISIONS.md)). Hosted o
 
 > **Branding:** the product/PWA identity is **Rungs** (single shared identity, ADR-013);
 > individual Leagues keep their own display names (e.g. "Doubles Squash @ BSC"). The Fly
-> app/Postgres and domain still carry the old `squash` names — the infra rename to
-> `rungs.co.za` is **step 25** (pending).
+> app/Postgres and domain were renamed to `rungs` at the Rungs cutover (plan step 25,
+> complete) — see [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md).
 
 ## Tech stack
 
@@ -54,7 +54,7 @@ This is why most behaviour is testable without a database or the OAuth runtime.
 | [`app/`](app/) | Routes (App Router). Landing/switcher: `/`. Per-League under **`/l/[slug]/`** — public: ladder, `sessions`, `sessions/[id]`, `players/[id]`; scorer: `submit`, `sessions/[id]/edit`, `admin/{players,sessions,settings}`. Global-admin (top-level): `/admin/{users,leagues,access-requests}`. Plus `/signin`, `/request-access` (non-staff bounce), `/unauthorised`, `/~offline`. Server Actions in `**/actions.ts`. |
 | [`app/sw.ts`](app/sw.ts) | Serwist service-worker source (bundled to `public/sw.js` at build). |
 | [`lib/`](lib/) | Pure domain logic (see below) + the Prisma singleton and store adapters. |
-| [`components/`](components/) | App components (`site-header`, `session-form`, `admin-menu`, `rating-trend-chart`, …) and `components/ui/` design-system primitives (`page-shell`, `card`, `badge`, `trend`, `bottom-nav`, …). |
+| [`components/`](components/) | App components (`site-header`, `session-form` (with draft autosave in submit mode), `share-button` (Web Share API, touch-only — ADR-009/016), `admin-menu`, `rating-trend-chart`, …) and `components/ui/` design-system primitives (`page-shell`, `card`, `badge`, `trend`, `bottom-nav`, …). |
 | [`prisma/`](prisma/) | `schema.prisma`, `migrations/`, `seed.ts` (seeds the BSC + Padel Leagues, each with 15 settings, + the first admin), `seed-sample.ts` (opt-in demo data). |
 | [`auth.ts`](auth.ts) | Single Auth.js config (providers + `signIn`/`jwt`/`session` callbacks). |
 | [`proxy.ts`](proxy.ts) | Next 16 proxy (was `middleware.ts`) — route gating via `authorizeRoute`. |
@@ -71,12 +71,17 @@ This is why most behaviour is testable without a database or the OAuth runtime.
   (provider-aware sign-in, role attach, credentials verify). [`password.ts`](lib/password.ts)
   for the Credentials provider.
 - **Tenancy** — [`league.ts`](lib/league.ts) (`leagueBySlug`), [`league-access.ts`](lib/league-access.ts)
-  (`resolveLeagueOr404` / `requireLeagueScorer` — the page-boundary gate), `league-scorer-store.ts`
+  (`resolveLeagueOr404` — slug→League for public pages; `resolveScorerContext` — the non-throwing
+  scorer resolver used by Server Actions; `requireLeagueScorer` — its page-boundary adapter that
+  redirects/404s), `league-scorer-store.ts`
   (grant/revoke/list), `landing.ts` (`visibleLeaguesFor` / `bounceTarget`), `slug.ts`
   (suggest/validate; slugs are immutable), `league-provisioning.ts` (create/update/delete League,
   assign/revoke Scorer), `access-requests.ts` (request/approve/dismiss — ADR-014), `page-title.ts`.
 - **Entities** — `players.ts` / `users.ts` / `settings.ts` (pure create/update + validation
-  over `*-store.ts` ports), `session-validation.ts`, `session-authz.ts`.
+  over `*-store.ts` ports), `session-validation.ts`, `session-authz.ts`,
+  `session-intake.ts` (pure `intakeSession` unifying submit + edit — resolves on-the-fly players,
+  validates, persists, triggers per-league recalc) backed by `session-write-store.ts`
+  (Prisma `SessionWriteStore` adapter).
 - **Presentation helpers** — `public-ladder.ts`, `session-history.ts`, `player-trend.ts`,
   `nav.ts`, `default-settings.ts`.
 - **Demo data** — `sample-data.ts` (deterministic generator used by `seed-sample.ts`).

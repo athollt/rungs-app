@@ -2320,3 +2320,168 @@ regardless of its name).
 - `npm run build` ✅. `npm run test`: **235/235** ✅. No route change → no new E2E.
 - `AGENT-NOTES.md` line 9 still says the infra rename is "(pending)" — stale after step 25,
   but outside this step's rename map; left untouched per AGENTS.md §4 (flagged, not fixed).
+
+---
+
+## Step 27 — Session intake deepening
+
+**Date**: 2026-07-03
+
+### Delivered
+
+- **`lib/session-intake.ts`** — new pure module unifying the submit and edit
+  intake paths. `intakeSession(input, store)` resolves on-the-fly names via
+  `resolvePlayerName` (reusing existing players case-insensitively — the
+  duplicate-Player fix), validates via `validateSession`, persists (create or
+  replace), and triggers a full per-league recalc via `runRecalculation`. One
+  function, two call sites (submit + edit). `deleteSession` stays separate (it
+  neither resolves nor validates).
+  - `SessionIntakeStore` port: combines `PlayerStore` (findByName, create),
+    `SessionWriteStore` (createSession, replaceSession), and `RecalcStore`.
+  - `SessionWriteStore` port: `createSession` (insert Session + SessionPlayers)
+    and `replaceSession` (delete old SessionPlayers + insert new).
+  - `IntakeSlot` / `SessionIntakeInput` / `IntakeResult` types.
+- **`lib/session-write-store.ts`** — Prisma-backed `SessionWriteStore` adapter
+  (`prismaSessionWriteStore`) + `makePrismaSessionIntakeStore(leagueId)` factory
+  that composes the per-League PlayerStore, the session write store, and the
+  shared recalc store into one `SessionIntakeStore`.
+- **`lib/league-access.ts`** — extracted `resolveScorerContext(slug)`: a pure,
+  non-throwing resolver returning `{ ok: true; league; userId; role }` or
+  `{ ok: false; error }`. Resolves league by slug, checks auth, checks the
+  scorer grant with admin bypass (ADR-012). `requireLeagueScorer` is now a thin
+  redirecting adapter over it (page callers unchanged). Server Actions call
+  `resolveScorerContext` directly and return `{ ok: false; error }` on failure
+  — no redirect mismatch.
+- **`lib/players.ts`** — narrowed `resolvePlayerName`'s store param to
+  `PlayerNameResolver` (Pick of findByName + create) so `SessionIntakeStore`
+  can call it without implementing the full `PlayerStore`. Backwards-compatible
+  (a full `PlayerStore` still satisfies the narrower type).
+- **`app/l/[slug]/submit/actions.ts`** — refactored to call `resolveScorerContext`
+  + `intakeSession({ mode: "create" })`. Dropped the inline player resolution,
+  validation, `prisma.session.create`, and `runRecalculation` calls.
+- **`app/l/[slug]/sessions/[id]/edit/actions.ts`** — refactored `updateSessionAction`
+  to call `resolveScorerContext` + `canMutateSession` + `intakeSession({ mode:
+  "update" })`. Deleted the hand-rolled `authoriseFor` (replaced by
+  `resolveScorerContext` + `canMutateSession`) and the direct `prisma.player.create`
+  (replaced by `resolvePlayerName` inside `intakeSession`). `deleteSessionAction`
+  now uses `resolveScorerContext` + `canMutateSession` too.
+- **Tests:** `lib/session-intake.test.ts` (5) — create all-existing, create new
+  name, update reuses existing on name match (duplicate-Player regression),
+  update replaces all players, invalid session returns error without persisting.
+  `lib/league-access.test.ts` (9) — `resolveScorerContext` ok/error/admin-
+  bypass/unknown-slug/unauthenticated + `requireLeagueScorer` redirect/notFound
+  adapter behaviours.
+- **E2E:** `e2e/session-edit.spec.ts` (+1) — editing a session and adding a new
+  on-the-fly player creates it exactly once (no duplicate row on the admin
+  players list).
+
+### Deviations / notes
+
+- **The "type an existing player name as + New" E2E scenario is not reachable
+  via the UI.** `SessionForm`'s `confirmNewChip` blocks a "+ New" name that
+  matches the roster (case-insensitive), and the edit page passes all league
+  players as the roster. The duplicate-Player bug was only reachable via a race
+  (player created between page load and submit) or a forged action call. The
+  reuse-on-match regression is therefore covered by the `intakeSession` unit
+  test (behaviour 3), which directly asserts `resolvePlayerName` is called. The
+  E2E verifies the unified edit → `intakeSession` → player-creation path works
+  without duplication.
+- **`replaceSession` preserves the original submitter.** The edit path does not
+  reassign ownership — `submittedById` is not updated on edit (matching the
+  prior edit action; an editor is not the submitter). `intakeSession` receives
+  `submittedById` for the create path only.
+- **`prismaSessionWriteStore` re-validates inside each method.** `intakeSession`
+  validates before persisting, but the adapter derives `totalPlayerWins` /
+  `inferredGames` / `playerCount` from `validateSession` output (the pure
+  function is the single source of those derived fields), so it re-runs
+  validation to get them. A double validation is cheap and keeps the adapter
+  self-contained.
+
+### Validation
+
+- `npm run build` — ✅ zero errors/warnings
+- `npm run test` — ✅ 249/249 unit tests pass (+5 session-intake, +9
+  league-access; 235 prior)
+- `npx playwright test e2e/session-edit.spec.ts` — ✅ 5/5 pass (+1 duplicate-fix
+  regression)
+
+
+## Step 28 — Share from session history + draft autosave
+
+**Delivered:**
+- `components/share-button.tsx` — new client `ShareButton` component with the
+  same Web Share API + `pointer: coarse` gate as the post-submit success screen
+  (ADR-009). The `canShare` check is deferred to a mount effect so the server
+  renders `null` and the first client render matches (no hydration mismatch).
+  Reuses `buildShareText` from `lib/share.ts`.
+- `app/l/[slug]/sessions/page.tsx` — `ShareButton` added to each session history
+  card, passing the roster (mapped to `ShareRosterEntry[]`) + `ladderUrlForSlug`.
+- `components/session-form.tsx` — draft autosave in submit mode: entries + notes
+  are persisted to `localStorage` keyed by `rungs-draft-{slug}` on every change.
+  A saved draft is restored on mount (in a mount effect, post-hydration, to
+  avoid a hydration mismatch). The draft is cleared on a successful submit. An
+  `autosaveSkip` ref guards the first mount so the autosave effect doesn't
+  clobber the saved draft before the restore effect reads it. Edit mode
+  (`initialSlots` present) never reads or writes a draft.
+- `app/l/[slug]/submit/page.tsx` — passes `slug` to `SessionForm`.
+- `docs/plans/DECISIONS.md` — ADR-016 appended (extends ADR-009).
+
+**Tests:**
+- `components/share-button.test.tsx` — 5 tests: renders on touch, hidden on
+  desktop, hidden without Web Share API, share text correctness, notes in share
+  text.
+- `components/session-form.test.tsx` — +4 tests: autosaves on change, restores
+  on mount, clears on submit, no autosave in edit mode.
+- `e2e/session-history.spec.ts` — +1 test: touch device shows Share button on a
+  history card and tapping it calls `navigator.share` with the roster + ladder
+  link.
+- `e2e/submit.spec.ts` — +1 test: draft entries survive a page reload and are
+  cleared after a successful submit.
+
+**Deviations from spec:**
+- The spec's draft restore was initially in `useState` initializers (reading
+  `localStorage` during render). This caused a hydration mismatch (server
+  renders an empty form, client restores the draft). Moved to a mount `useEffect`
+  — the standard hydration-safe pattern for client-only persisted state. The
+  `ShareButton`'s `canShare` check was similarly deferred to a mount effect for
+  the same reason.
+- An `autosaveSkip` ref was added to skip the autosave effect's first mount run,
+  preventing it from overwriting the saved draft with empty entries before the
+  restore effect reads it. This is an implementation detail not in the spec but
+  necessary for the restore + autosave effects to coexist correctly.
+
+### Validation
+
+- `npm run build` — ✅ zero errors/warnings
+- `npm run test` — ✅ 258/258 unit tests pass (+5 share-button, +4 autosave;
+  249 prior)
+- `npm run test:e2e` — ✅ 58/58 pass (+1 share-from-history, +1 draft autosave)
+
+
+## Step 29 — Update documentation
+
+**Date**: 2026-07-05
+
+### Delivered
+
+Lifecycle doc close (`update-docs` Mode A) for the steps 27-28 feature (session
+intake deepening + share from history + draft autosave).
+
+- `OVERVIEW.md` — `lib/` module list: added `session-intake.ts` (pure `intakeSession`
+  unifying submit + edit) backed by `session-write-store.ts` (Prisma `SessionWriteStore`
+  adapter) to the Entities section. Tenancy section now lists `resolveScorerContext`
+  (the non-throwing scorer resolver used by Server Actions) alongside
+  `requireLeagueScorer` (its page-boundary redirecting adapter) and `resolveLeagueOr404`.
+- `OVERVIEW.md` — components list: noted `share-button` (Web Share API, touch-only -
+  ADR-009/016) and the `session-form` draft autosave in submit mode.
+- `DECISIONS.md` — verified ADR-016 (share from session history) is appended and
+  complete (added in step 28; no change needed this step).
+
+### Validation
+
+- `npm run build` — ✅ zero errors/warnings
+- `npm run test` — ✅ 258/258 unit tests pass (docs-only change, no code)
+- All doc-referenced paths (`lib/session-intake.ts`, `lib/session-write-store.ts`,
+  `lib/league-access.ts`, `components/share-button.tsx`, `components/session-form.tsx`)
+  exist in the current commit.
+

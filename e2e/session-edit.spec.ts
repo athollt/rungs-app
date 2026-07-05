@@ -1,5 +1,5 @@
 import { test } from "@playwright/test";
-import { signIn, submitNewSession, setPlayerWins, expect } from "./helpers";
+import { signIn, submitNewSession, setPlayerWins, addNewPlayer, expect } from "./helpers";
 import { TEST_ADMIN, TEST_SCORER } from "./fixtures";
 import type { Page } from "@playwright/test";
 
@@ -67,6 +67,38 @@ test("an admin can edit any session and save", async ({ page }) => {
   await setPlayerWins(page, `[e2e] ${token} P2`, 3);
   await page.getByRole("button", { name: "Save" }).click();
   await expect(page).toHaveURL(/\/l\/bsc-doubles-squash$/);
+});
+
+// Regression (step 27): the edit action now resolves on-the-fly names through
+// intakeSession/resolvePlayerName (unified with submit) instead of calling
+// prisma.player.create directly. Verify the edit path creates a new on-the-fly
+// player exactly once (no duplicate row). The "reuses existing player on a
+// name match" regression is covered by the lib/session-intake unit test
+// (behaviour 3) — the form's client-side roster guard prevents typing an
+// existing roster name as "+ New", so that scenario is not reachable via UI.
+test("editing a session creates an on-the-fly player exactly once", async ({
+  page,
+}) => {
+  const token = `dup-fix-${Date.now()}`;
+  await signIn(page, TEST_ADMIN.email, TEST_ADMIN.password);
+  await submitSession(page, token);
+
+  const href = await newestEditHref(page);
+  await page.goto(href);
+  await expect(page.getByRole("heading", { name: "Edit session" })).toBeVisible();
+
+  // Replace P0 with a genuinely new on-the-fly player, keeping the total even.
+  const grid = page.getByRole("group", { name: "Choose players" });
+  await grid.getByRole("button", { name: `[e2e] ${token} P0` }).click();
+  const newPlayer = `[e2e] ${token} P4`;
+  await addNewPlayer(page, newPlayer);
+  await setPlayerWins(page, newPlayer, 3);
+  await page.getByRole("button", { name: "Save" }).click();
+  await expect(page).toHaveURL(/\/l\/bsc-doubles-squash$/);
+
+  // The new player must appear exactly once on the admin players list.
+  await page.goto("/l/bsc-doubles-squash/admin/players");
+  await expect(page.getByRole("group", { name: newPlayer })).toHaveCount(1);
 });
 
 test("an admin can delete a session", async ({ page }) => {

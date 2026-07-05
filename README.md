@@ -5,10 +5,9 @@ A mobile-first PWA hosting **many ranking ladders** — one **League** per club,
 League's ladder, session history, and per-player rating trends are public; signed-in
 **scorers** log results and manage players for the League(s) they're granted, while a global
 **admin** administers every League, creates Leagues, and assigns scorers. Login is staff-only
-(Google); a non-staff sign-in can request access in-app. (The repo name predates the rebrand.)
+(Google); a non-staff sign-in can request access in-app.
 
-**Live:** https://squash.tomlinson.co.za — the domain rename to **rungs.co.za** is pending
-(plan step 25).
+**Live:** https://app.rungs.co.za
 
 Built with Next.js 16 (App Router), TypeScript, Prisma 7 / PostgreSQL, Auth.js v5, Tailwind
 v4, and Serwist (PWA).
@@ -87,5 +86,5 @@ guide (release migrations, first-admin seed, logs, rollback, backups):
   active/inactive status are computed (every setting explained).
 - [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) — production runtime guide.
 - [`docs/plans/`](docs/plans/) — design documents: the Rungs PRD + plan (multi-tenant
-  rebuild, steps 18–25), the original ladder PRD/plan, decisions (ADRs), changelog, and the
+  rebuild, steps 18–29), the original ladder PRD/plan, decisions (ADRs), changelog, and the
   original Google Sheets spec.

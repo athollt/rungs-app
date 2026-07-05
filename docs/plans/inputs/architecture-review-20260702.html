@@ -1,0 +1,354 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Architecture review - rungs-app</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script type="module">
+      import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+      mermaid.initialize({ startOnLoad: true, theme: "neutral", securityLevel: "loose" });
+    </script>
+    <style>
+      .seam { stroke-dasharray: 4 4; }
+      .leak { stroke: #dc2626; }
+      .deep { background: linear-gradient(135deg, #0f172a, #1e293b); }
+      .mod-label { font-size: 10px; letter-spacing: .08em; text-transform: uppercase; }
+      .arrow-head { marker-end: url(#arrow); }
+    </style>
+  </head>
+  <body class="bg-stone-50 text-slate-900 font-sans">
+    <main class="max-w-5xl mx-auto px-6 py-12 space-y-12">
+
+      <!-- Legend / header -->
+      <header class="space-y-3">
+        <div class="flex items-baseline justify-between">
+          <h1 class="font-serif text-3xl text-slate-800">Architecture review</h1>
+          <span class="text-sm text-slate-500">rungs-app &middot; 2 Jul 2026</span>
+        </div>
+        <div class="flex flex-wrap gap-x-6 gap-y-1 text-xs text-slate-600">
+          <span><span class="inline-block w-4 h-3 border border-slate-400 align-middle"></span> module</span>
+          <span><span class="inline-block w-6 border-t-2 border-dashed border-slate-500 align-middle"></span> seam</span>
+          <span><span class="inline-block w-6 border-t-2 border-red-600 align-middle"></span> leakage</span>
+          <span><span class="inline-block w-4 h-3 deep align-middle"></span> deep module</span>
+        </div>
+      </header>
+
+      <section id="candidates" class="space-y-10">
+
+        <!-- ============ CANDIDATE 1 ============ -->
+        <article id="c1" class="rounded-xl border border-slate-200 bg-white p-6 space-y-5 shadow-sm">
+          <div class="flex items-start justify-between gap-4">
+            <h2 class="font-serif text-2xl text-slate-800">Unify the Session intake pipeline</h2>
+            <div class="flex flex-col items-end gap-1 shrink-0">
+              <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800">Strong</span>
+              <span class="px-2.5 py-0.5 rounded-full text-xs bg-slate-100 text-slate-600">in-process</span>
+            </div>
+          </div>
+
+          <div>
+            <p class="text-xs uppercase tracking-wider text-slate-500 mb-1">Files</p>
+            <p class="font-mono text-sm text-slate-700 leading-6">
+              app/l/[slug]/submit/actions.ts<br/>
+              app/l/[slug]/sessions/[id]/edit/actions.ts<br/>
+              lib/players.ts (resolvePlayerName)<br/>
+              lib/session-validation.ts<br/>
+              lib/recalc.ts (runRecalculation)
+            </p>
+          </div>
+
+          <!-- Before / After -->
+          <div class="grid grid-cols-2 gap-4">
+            <!-- BEFORE -->
+            <div class="rounded-lg border border-slate-200 bg-stone-50 p-4">
+              <p class="text-xs uppercase tracking-wider text-slate-500 mb-3 text-center">Before</p>
+              <div class="space-y-2">
+                <div class="rounded border border-slate-400 bg-white p-2 text-center">
+                  <p class="mod-label text-slate-700">submit action</p>
+                  <p class="text-[10px] text-emerald-700 mt-1">resolvePlayerName &rarr; reuse</p>
+                </div>
+                <div class="rounded border border-red-400 bg-white p-2 text-center">
+                  <p class="mod-label text-slate-700">edit action</p>
+                  <p class="text-[10px] text-red-600 mt-1">prisma.player.create &rarr; duplicate</p>
+                </div>
+                <div class="rounded border border-slate-400 bg-white p-2 text-center">
+                  <p class="mod-label text-slate-700">validateSession</p>
+                </div>
+                <div class="rounded border border-slate-400 bg-white p-2 text-center">
+                  <p class="mod-label text-slate-700">runRecalculation</p>
+                </div>
+              </div>
+              <p class="text-[10px] text-red-600 text-center mt-3">two intake paths, divergent resolve + auth</p>
+            </div>
+
+            <!-- AFTER -->
+            <div class="rounded-lg border border-slate-200 bg-white p-4">
+              <p class="text-xs uppercase tracking-wider text-slate-500 mb-3 text-center">After</p>
+              <div class="rounded-lg deep p-3 text-center">
+                <p class="mod-label text-stone-200">Session intake module</p>
+                <p class="text-[10px] text-stone-400 mt-1">resolve &middot; validate &middot; persist &middot; recalc</p>
+                <div class="mt-2 space-y-1 text-[10px] text-stone-500">
+                  <p>resolvePlayerName (one path)</p>
+                  <p>validateSession</p>
+                  <p>persist (create | replace)</p>
+                  <p>runRecalculation</p>
+                </div>
+              </div>
+              <div class="flex justify-around mt-3 text-[10px] text-slate-600">
+                <span>submit &rarr; intake</span>
+                <span>edit &rarr; intake</span>
+              </div>
+              <p class="text-[10px] text-emerald-700 text-center mt-2">one interface, two call sites</p>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 gap-4 text-sm">
+            <div>
+              <p class="text-xs uppercase tracking-wider text-slate-500 mb-1">Problem</p>
+              <p class="text-slate-700">Submit reuses an existing Player by name; edit calls <code class="text-xs">prisma.player.create</code> directly - editing a session and typing a "new" name makes a duplicate Player row. Auth is hand-rolled twice.</p>
+            </div>
+            <div>
+              <p class="text-xs uppercase tracking-wider text-slate-500 mb-1">Solution</p>
+              <p class="text-slate-700">One intake module behind a single interface: resolve slots, validate, persist (create or replace), recalc. Submit and edit become two thin callers passing a flag.</p>
+            </div>
+          </div>
+
+          <div>
+            <p class="text-xs uppercase tracking-wider text-slate-500 mb-1">Wins</p>
+            <ul class="text-sm text-slate-700 space-y-0.5">
+              <li>- <b>locality:</b> the duplicate-Player bug concentrates in one module</li>
+              <li>- <b>leverage:</b> one resolve path, two call sites</li>
+              <li>- <b>interface shrinks;</b> edit stops reaching into Prisma</li>
+              <li>- tests hit one intake interface, not two actions</li>
+            </ul>
+          </div>
+        </article>
+
+        <!-- ============ CANDIDATE 2 ============ -->
+        <article id="c2" class="rounded-xl border border-slate-200 bg-white p-6 space-y-5 shadow-sm">
+          <div class="flex items-start justify-between gap-4">
+            <h2 class="font-serif text-2xl text-slate-800">Extract a League read module</h2>
+            <div class="flex flex-col items-end gap-1 shrink-0">
+              <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800">Strong</span>
+              <span class="px-2.5 py-0.5 rounded-full text-xs bg-slate-100 text-slate-600">local-substitutable</span>
+            </div>
+          </div>
+
+          <div>
+            <p class="text-xs uppercase tracking-wider text-slate-500 mb-1">Files</p>
+            <p class="font-mono text-sm text-slate-700 leading-6">
+              app/l/[slug]/page.tsx (ladder)<br/>
+              app/l/[slug]/players/[id]/page.tsx (trend)<br/>
+              app/l/[slug]/sessions/[id]/page.tsx (detail)<br/>
+              lib/recalc-store.ts (load* borrowed for reads)<br/>
+              lib/rating-engine.ts (recalculate)<br/>
+              lib/public-ladder.ts, lib/player-trend.ts
+            </p>
+          </div>
+
+          <!-- Before / After: call-graph collapse -->
+          <div class="grid grid-cols-2 gap-4">
+            <div class="rounded-lg border border-slate-200 bg-stone-50 p-4">
+              <p class="text-xs uppercase tracking-wider text-slate-500 mb-3 text-center">Before - ladder page</p>
+              <div class="rounded-lg border border-slate-200 bg-white p-3">
+                <pre class="mermaid">
+                  flowchart TD
+                    P[page.tsx] --> RS[recalc-store.load*]
+                    P --> PR[prisma.ladderSnapshot]
+                    P --> RE[recalculate]
+                    P --> PL[public-ladder]
+                    P --> R[render]
+                    class P,PR,RS,RE,PL,R node
+                </pre>
+              </div>
+              <p class="text-[10px] text-slate-500 text-center mt-2">page assembles load + engine + derive</p>
+            </div>
+            <div class="rounded-lg border border-slate-200 bg-white p-4">
+              <p class="text-xs uppercase tracking-wider text-slate-500 mb-3 text-center">After</p>
+              <div class="rounded-lg deep p-3">
+                <p class="mod-label text-stone-200 text-center">League read module</p>
+                <div class="mt-2 space-y-1 text-[10px] text-stone-400 text-center">
+                  <p>ladderFor(slug)</p>
+                  <p>playerTrend(slug, id)</p>
+                  <p>sessionDetail(slug, id)</p>
+                </div>
+              </div>
+              <div class="text-center mt-3 text-[10px] text-slate-600">page &rarr; one call &rarr; render</div>
+              <p class="text-[10px] text-emerald-700 text-center mt-1">load + recalc + derive behind one interface</p>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 gap-4 text-sm">
+            <div>
+              <p class="text-xs uppercase tracking-wider text-slate-500 mb-1">Problem</p>
+              <p class="text-slate-700">Three pages each borrow <code class="text-xs">RecalcStore.load*</code> (a write-path port), call <code class="text-xs">recalculate</code> inline, then reach into raw Prisma for view data. The "derive the Ladder" knowledge lives in the page, not a module.</p>
+            </div>
+            <div>
+              <p class="text-xs uppercase tracking-wider text-slate-500 mb-1">Solution</p>
+              <p class="text-slate-700">A read module with one method per view (<code class="text-xs">ladderFor</code>, <code class="text-xs">playerTrend</code>, <code class="text-xs">sessionDetail</code>). It owns load + recalculate + derive; pages shrink to call-and-render.</p>
+            </div>
+          </div>
+
+          <div>
+            <p class="text-xs uppercase tracking-wider text-slate-500 mb-1">Wins</p>
+            <ul class="text-sm text-slate-700 space-y-0.5">
+              <li>- <b>locality:</b> "how the Ladder is derived" concentrates in one module</li>
+              <li>- <b>leverage:</b> one interface, three pages</li>
+              <li>- <b>RecalcStore</b> stops being borrowed for reads - write port stays write</li>
+              <li>- tests build one read adapter, not a page + store + engine</li>
+            </ul>
+          </div>
+        </article>
+
+        <!-- ============ CANDIDATE 3 ============ -->
+        <article id="c3" class="rounded-xl border border-slate-200 bg-white p-6 space-y-5 shadow-sm">
+          <div class="flex items-start justify-between gap-4">
+            <h2 class="font-serif text-2xl text-slate-800">One admin gate, not three</h2>
+            <div class="flex flex-col items-end gap-1 shrink-0">
+              <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-800">Worth exploring</span>
+              <span class="px-2.5 py-0.5 rounded-full text-xs bg-slate-100 text-slate-600">in-process</span>
+            </div>
+          </div>
+
+          <div>
+            <p class="text-xs uppercase tracking-wider text-slate-500 mb-1">Files</p>
+            <p class="font-mono text-sm text-slate-700 leading-6">
+              app/l/[slug]/admin/settings/actions.ts (requireAdmin)<br/>
+              app/admin/leagues/actions.ts (requireAdmin)<br/>
+              app/admin/access-requests/actions.ts (requireAdmin)<br/>
+              app/l/[slug]/sessions/[id]/edit/actions.ts (authoriseFor)<br/>
+              lib/league-access.ts (requireLeagueScorer - the scorer gate)
+            </p>
+          </div>
+
+          <!-- Before/After: mass diagram -->
+          <div class="grid grid-cols-2 gap-4">
+            <div class="rounded-lg border border-slate-200 bg-stone-50 p-4">
+              <p class="text-xs uppercase tracking-wider text-slate-500 mb-3 text-center">Before - three shallow copies</p>
+              <div class="flex justify-around items-end h-24">
+                <div class="flex flex-col items-center">
+                  <div class="w-10 h-8 border border-slate-400 bg-white"></div>
+                  <div class="w-10 h-3 border border-slate-400 bg-white"></div>
+                  <p class="mod-label text-slate-600 mt-1">settings</p>
+                </div>
+                <div class="flex flex-col items-center">
+                  <div class="w-10 h-8 border border-slate-400 bg-white"></div>
+                  <div class="w-10 h-3 border border-slate-400 bg-white"></div>
+                  <p class="mod-label text-slate-600 mt-1">leagues</p>
+                </div>
+                <div class="flex flex-col items-center">
+                  <div class="w-10 h-8 border border-slate-400 bg-white"></div>
+                  <div class="w-10 h-3 border border-slate-400 bg-white"></div>
+                  <p class="mod-label text-slate-600 mt-1">access</p>
+                </div>
+              </div>
+              <p class="text-[10px] text-slate-500 text-center mt-2">interface = implementation (3 lines each)</p>
+            </div>
+            <div class="rounded-lg border border-slate-200 bg-white p-4">
+              <p class="text-xs uppercase tracking-wider text-slate-500 mb-3 text-center">After</p>
+              <div class="flex flex-col items-center justify-center h-24">
+                <div class="deep rounded p-3 w-32 text-center">
+                  <p class="mod-label text-stone-200">requireAdmin</p>
+                </div>
+                <p class="text-[10px] text-slate-600 mt-3">three actions call one gate</p>
+              </div>
+              <p class="text-[10px] text-emerald-700 text-center mt-1">locality: the admin rule lives once</p>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 gap-4 text-sm">
+            <div>
+              <p class="text-xs uppercase tracking-wider text-slate-500 mb-1">Problem</p>
+              <p class="text-slate-700"><code class="text-xs">requireAdmin()</code> is copy-pasted in three action files - same three lines each. A scorer gate (<code class="text-xs">requireLeagueScorer</code>) exists; an admin gate does not. The edit action hand-rolls a fourth auth (<code class="text-xs">authoriseFor</code>).</p>
+            </div>
+            <div>
+              <p class="text-xs uppercase tracking-wider text-slate-500 mb-1">Solution</p>
+              <p class="text-slate-700">One <code class="text-xs">requireAdmin</code> next to <code class="text-xs">requireLeagueScorer</code> in <code class="text-xs">league-access.ts</code>. Admin actions call it; the edit action's <code class="text-xs">authoriseFor</code> composes it with the ownership check.</p>
+            </div>
+          </div>
+
+          <div>
+            <p class="text-xs uppercase tracking-wider text-slate-500 mb-1">Wins</p>
+            <ul class="text-sm text-slate-700 space-y-0.5">
+              <li>- <b>locality:</b> "admin actions require ADMIN" lives in one module</li>
+              <li>- delete three shallow copies</li>
+              <li>- edit auth composes the gate instead of re-deriving it</li>
+            </ul>
+          </div>
+        </article>
+
+        <!-- ============ CANDIDATE 4 ============ -->
+        <article id="c4" class="rounded-xl border border-slate-200 bg-white p-6 space-y-5 shadow-sm">
+          <div class="flex items-start justify-between gap-4">
+            <h2 class="font-serif text-2xl text-slate-800">Concentrate the Scorer grant/revoke adapter</h2>
+            <div class="flex flex-col items-end gap-1 shrink-0">
+              <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-200 text-slate-700">Speculative</span>
+              <span class="px-2.5 py-0.5 rounded-full text-xs bg-slate-100 text-slate-600">ports &amp; adapters</span>
+            </div>
+          </div>
+
+          <div>
+            <p class="text-xs uppercase tracking-wider text-slate-500 mb-1">Files</p>
+            <p class="font-mono text-sm text-slate-700 leading-6">
+              lib/league-scorer-store.ts (LeagueScorerStore)<br/>
+              lib/league-provisioning-store.ts (grant/revoke re-declared)<br/>
+              lib/access-request-store.ts (grant re-declared)
+            </p>
+          </div>
+
+          <!-- Before/After: cross-section -->
+          <div class="grid grid-cols-2 gap-4">
+            <div class="rounded-lg border border-slate-200 bg-stone-50 p-4">
+              <p class="text-xs uppercase tracking-wider text-slate-500 mb-3 text-center">Before</p>
+              <div class="space-y-1.5">
+                <div class="border-l-4 border-slate-400 bg-white px-2 py-1 text-[10px] text-slate-600">scorer-store: grant / revoke</div>
+                <div class="border-l-4 border-red-400 bg-white px-2 py-1 text-[10px] text-slate-600">provisioning-store: grant / revoke (copy)</div>
+                <div class="border-l-4 border-red-400 bg-white px-2 py-1 text-[10px] text-slate-600">access-request-store: grant (copy)</div>
+              </div>
+              <p class="text-[10px] text-red-600 text-center mt-2">same upsert, three adapters</p>
+            </div>
+            <div class="rounded-lg border border-slate-200 bg-white p-4">
+              <p class="text-xs uppercase tracking-wider text-slate-500 mb-3 text-center">After</p>
+              <div class="space-y-1.5">
+                <div class="deep border-l-4 border-stone-300 px-2 py-1 text-[10px] text-stone-200">scorer-store: grant / revoke</div>
+                <div class="border-l-4 border-slate-300 bg-white px-2 py-1 text-[10px] text-slate-500">provisioning &rarr; delegates</div>
+                <div class="border-l-4 border-slate-300 bg-white px-2 py-1 text-[10px] text-slate-500">access-request &rarr; delegates</div>
+              </div>
+              <p class="text-[10px] text-emerald-700 text-center mt-2">one adapter, two delegators</p>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 gap-4 text-sm">
+            <div>
+              <p class="text-xs uppercase tracking-wider text-slate-500 mb-1">Problem</p>
+              <p class="text-slate-700"><code class="text-xs">grant</code>/<code class="text-xs">revoke</code> (upsert + deleteMany on LeagueScorer) is implemented three times across three Prisma adapters. The <code class="text-xs">LeagueScorerStore</code> interface exists but the other two stores re-declare the methods instead of composing it.</p>
+            </div>
+            <div>
+              <p class="text-xs uppercase tracking-wider text-slate-500 mb-1">Solution</p>
+              <p class="text-slate-700">The provisioning and access-request Prisma adapters delegate grant/revoke to <code class="text-xs">prismaLeagueScorerStore</code> rather than re-implementing. The pure ports stay separate; only the adapter bodies collapse.</p>
+            </div>
+          </div>
+
+          <div>
+            <p class="text-xs uppercase tracking-wider text-slate-500 mb-1">Wins</p>
+            <ul class="text-sm text-slate-700 space-y-0.5">
+              <li>- <b>locality:</b> the upsert idiom lives in one adapter</li>
+              <li>- delete two copies of a three-line method</li>
+              <li>- pure ports unchanged - seam discipline holds</li>
+            </ul>
+          </div>
+        </article>
+
+      </section>
+
+      <!-- ============ TOP RECOMMENDATION ============ -->
+      <section id="top-recommendation" class="rounded-xl deep p-6 space-y-3 shadow-lg">
+        <p class="text-xs uppercase tracking-wider text-stone-400">Top recommendation</p>
+        <h2 class="font-serif text-2xl text-stone-100">Unify the Session intake pipeline</h2>
+        <p class="text-stone-300 text-sm max-w-2xl">
+          It is the only candidate with an active bug - editing a session and typing a new player name creates a duplicate Player row because the edit path bypasses <code class="text-xs">resolvePlayerName</code>. Deepening concentrates resolve + validate + persist + recalc behind one interface, fixes the duplicate, and gives both submit and edit a single test surface. <a href="#c1" class="text-emerald-300 underline">Jump to card &rarr;</a>
+        </p>
+      </section>
+
+    </main>
+  </body>
+</html>

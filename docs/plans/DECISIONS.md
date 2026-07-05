@@ -253,3 +253,17 @@ Deployment (14.4) depends on 13.5 so it ships the finished design. Prototype cod
 
 **Consequence**: No data loss; the BSC ladder becomes "just another league" with continuity of ratings and history. This is the riskiest single migration in the Rungs plan (touches every table + prod data) and warrants its own plan step with a verified backup taken first (ties to step-17 backup verification). Revisit nothing — this is a one-time adoption.
 
+---
+
+## ADR-016: Share from session history (extends ADR-009)
+
+**Date**: 2026-07-03
+**Status**: accepted (built — Rungs plan step 28)
+
+**Context**: ADR-009 limited the Share to WhatsApp button to the post-submit success screen. In practice scorers sometimes forget to share at submit time and remember later, and anyone viewing the public ladder may want to share a past result. The session history page (`/l/{slug}/sessions`) is already public and lists each session's roster + wins per card.
+
+**Decision**: Add a Share to WhatsApp button on each session history card via a new client `ShareButton` component. Same Web Share API, same `pointer: coarse` + `navigator.share` gate as the form's success screen (hidden on desktop), same `buildShareText` pure helper. The server component page passes the roster (mapped to `ShareRosterEntry[]`) + `ladderUrlForSlug(slug)` as props. Public/ungated — the ladder is already public, no auth needed. Does not change the edit flow (ADR-009's "edit flow is unchanged" stands).
+
+**Consequence**: Share is available from two surfaces (post-submit success screen + session history). Zero new infra, consistent with ADR-009. The `ShareButton` is reusable; the form's success screen keeps its own inline share button (it shares the in-memory just-submitted roster, not a persisted one) rather than refactoring to the shared component — the two surfaces have different data lifecycles.
+
+

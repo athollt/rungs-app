@@ -52,6 +52,7 @@ export default async function SubmitPage({
         onSubmit={onSubmit}
         ladderUrl={ladderUrlForSlug(slug)}
         ladderHref={`/l/${slug}`}
+        slug={slug}
       />
     </PageShell>
   );

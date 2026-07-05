@@ -142,3 +142,43 @@ test("desktop shows the success screen without a Share button", async ({
   await page.getByRole("button", { name: /view ladder/i }).click();
   await expect(page).toHaveURL(/\/l\/bsc-doubles-squash$/);
 });
+
+// Step 28: in-progress entries are autosaved to localStorage and restored after a
+// page reload, so a courtside scorer doesn't lose data if the app closes. The
+// draft is cleared on a successful submit.
+test("draft entries survive a reload and are cleared after submit", async ({
+  page,
+}) => {
+  await signIn(page, TEST_SCORER.email, TEST_SCORER.password);
+  await page.goto("/l/bsc-doubles-squash/submit");
+
+  const token = `draft-${Date.now()}`;
+  const name = `[e2e] ${token} P0`;
+  await addNewPlayer(page, name);
+  await setPlayerWins(page, name, 3);
+  // Type some notes so both entries + notes are in the draft.
+  await page.getByLabel("Notes").fill("Half-time scores");
+
+  // Reload — the form should restore the player + wins + notes from localStorage.
+  await page.reload();
+  const block = page.getByRole("group", { name });
+  await expect(block).toBeVisible();
+  await expect(
+    block.getByRole("button", { name: "3 wins", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByLabel("Notes")).toHaveValue("Half-time scores");
+
+  // Add the remaining players to make a valid session, then submit.
+  for (let i = 1; i < 4; i++) {
+    const n = `[e2e] ${token} P${i}`;
+    await addNewPlayer(page, n);
+    await setPlayerWins(page, n, i === 1 ? 3 : 1);
+  }
+  await page.getByRole("button", { name: /log results/i }).click();
+  await expect(page.getByText(/session logged/i)).toBeVisible();
+
+  // The draft is cleared on submit — a fresh reload shows an empty form.
+  await page.goto("/l/bsc-doubles-squash/submit");
+  await expect(page.getByRole("group", { name })).toHaveCount(0);
+  await expect(page.getByLabel("Notes")).toHaveValue("");
+});
