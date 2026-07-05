@@ -2457,3 +2457,31 @@ regardless of its name).
   249 prior)
 - `npm run test:e2e` — ✅ 58/58 pass (+1 share-from-history, +1 draft autosave)
 
+
+## Step 29 — Update documentation
+
+**Date**: 2026-07-05
+
+### Delivered
+
+Lifecycle doc close (`update-docs` Mode A) for the steps 27-28 feature (session
+intake deepening + share from history + draft autosave).
+
+- `OVERVIEW.md` — `lib/` module list: added `session-intake.ts` (pure `intakeSession`
+  unifying submit + edit) backed by `session-write-store.ts` (Prisma `SessionWriteStore`
+  adapter) to the Entities section. Tenancy section now lists `resolveScorerContext`
+  (the non-throwing scorer resolver used by Server Actions) alongside
+  `requireLeagueScorer` (its page-boundary redirecting adapter) and `resolveLeagueOr404`.
+- `OVERVIEW.md` — components list: noted `share-button` (Web Share API, touch-only -
+  ADR-009/016) and the `session-form` draft autosave in submit mode.
+- `DECISIONS.md` — verified ADR-016 (share from session history) is appended and
+  complete (added in step 28; no change needed this step).
+
+### Validation
+
+- `npm run build` — ✅ zero errors/warnings
+- `npm run test` — ✅ 258/258 unit tests pass (docs-only change, no code)
+- All doc-referenced paths (`lib/session-intake.ts`, `lib/session-write-store.ts`,
+  `lib/league-access.ts`, `components/share-button.tsx`, `components/session-form.tsx`)
+  exist in the current commit.
+

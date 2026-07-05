@@ -76,7 +76,7 @@ No writing all tests up front. No testing internal collaborators. Single commit 
 | 26 | [GitHub repo rename → `rungs-app`](steps/step-26-repo-rename.md) | complete | 25 |
 | 27 | [Session intake deepening — unify submit/edit, fix duplicate-Player bug](steps/step-27-session-intake-deepening.md) | done | 26 |
 | 28 | [Share from session history + draft autosave](steps/step-28-share-from-history-draft-autosave.md) | done | 27 |
-| 29 | [Update documentation](steps/step-29-update-docs.md) | pending | 28 |
+| 29 | [Update documentation](steps/step-29-update-docs.md) | complete | 28 |
 
 > Risk isolation: **step 19** (data migration over live prod data) and **step 25**
 > (Fly app/DB + domain rename to `rungs.co.za` — hard to reverse, touches GitHub
