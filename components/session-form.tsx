@@ -179,6 +179,7 @@ export function SessionForm({
     if (initialSlots || !slug) return;
     const draft = readDraft(slug);
     if (!draft) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- deliberate post-mount draft restore (hydration-safe; avoids SSR/client mismatch).
     setEntries(draft.entries);
     setNotes(draft.notes);
     keySeq.current =

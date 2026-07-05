@@ -25,6 +25,7 @@ export function ShareButton({
   const [canShare, setCanShare] = useState(false);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- deliberate post-mount client-only check (hydration-safe; see ADR-009/016).
     setCanShare(
       typeof navigator !== "undefined" &&
         typeof navigator.share === "function" &&
