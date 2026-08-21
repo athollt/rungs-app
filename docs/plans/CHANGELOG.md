@@ -2485,3 +2485,46 @@ intake deepening + share from history + draft autosave).
   `lib/league-access.ts`, `components/share-button.tsx`, `components/session-form.tsx`)
   exist in the current commit.
 
+
+---
+
+## Step 30 — Timer: a swimming stopwatch inside Rungs
+
+**Date**: 2026-08-21
+
+### Delivered
+
+- `lib/timer.ts` — pure stopwatch logic over absolute wall-clock timestamps: `formatDuration` (`mm:ss.hh`, rolling to `h:mm:ss.hh`), `elapsedMs`, `lapRows`, `fastestLapIndex`, `restoreOrDiscard` (the 12-hour stale-run rule). Clock-injected, no React, no storage. 14 unit tests.
+- `components/stopwatch.tsx` — the client component, owning only three effects: a `requestAnimationFrame` loop while running (a 1s interval while idle, for the live date/time line), the Screen Wake Lock re-acquired on `visibilitychange`, and `localStorage` (`rungs-timer` for the run, `rungs-timer-title` for the last title).
+- `app/timer/page.tsx` — public route, no Prisma and no `auth()`. Renders as a dynamic route because the root layout reads the session.
+- Behaviour: Start/Stop toggles; Lap gets half the button row (the only button pressed under time pressure) and is disabled while stopped; Stop records the final lap and ends the run in one action, with no resume; Reset needs a confirming second tap and is the only way out of a finished run; the date/time line is live until Start then frozen at the start timestamp; laps are chronological with the fastest highlighted.
+- `lib/nav.ts` — new `toolLinks()` group, appended in `AdminMenu` for any role.
+- `lib/auth-rules.ts` — `/timer` added to `isPublicRoute`.
+- ADR-017 in `DECISIONS.md`; `OVERVIEW.md` directory map, `lib/` modules, auth section and Domain Language; `README.md` intro.
+
+### Deviations from spec
+
+- The step file specified an eslint-disable for `react-hooks/set-state-in-effect` on the mount restore effect (matching `SessionForm`). The rule did not fire there and ESLint flagged the directive as unused, so it was dropped; the explanatory comment stays.
+
+### Incidental fix
+
+- Appending tools means the header hamburger is never empty for a staff user. Previously a SCORER off a league route got no menu at all, and would have been stranded on `/timer` with no way back.
+
+### Validation results
+
+- `npm run build` — passes; `/timer` listed as a dynamic (`ƒ`) route, Serwist service worker bundled as usual.
+- `npm run test` — 275 passed / 45 files, including the 14 new timer tests plus additions to `nav.test.ts` and `auth-rules.test.ts`.
+- `npm run test:e2e` — 60 passed. Two new journeys in `e2e/timer.spec.ts`: a signed-out start/lap/stop/confirm-reset cycle, and an in-progress run restored across a reload.
+- **Pre-existing flake, not introduced here**: `e2e/session-history.spec.ts:69` (the touch-share test from step 28) fails intermittently, roughly half of runs. Verified by stashing all of this step's changes and running the baseline suite twice (one fail, one pass), and it passes reliably in isolation. Left alone; tracked separately.
+
+### Not done (knowingly accepted)
+
+- No separate home-screen icon — the Timer is reached by opening Rungs (ADR-017).
+- Past ten laps the list scrolls, so a screenshot loses the top rows.
+- `/timer` is not precached, so a first-ever offline hit falls back to `/~offline`. Covered by the manual acceptance checks below rather than by an assumption.
+
+### Manual acceptance (post-deploy, on the phone)
+
+1. Airplane mode, open the installed PWA, navigate to Timer — loads and runs.
+2. Start a run, lock the phone, wait, unlock — correct elapsed time, screen stays awake.
+3. Ten laps fit in one screenshot with no scrolling.

@@ -267,3 +267,21 @@ Deployment (14.4) depends on 13.5 so it ships the finished design. Prototype cod
 **Consequence**: Share is available from two surfaces (post-submit success screen + session history). Zero new infra, consistent with ADR-009. The `ShareButton` is reusable; the form's success screen keeps its own inline share button (it shares the in-memory just-submitted roster, not a persisted one) rather than refactoring to the shared component — the two surfaces have different data lifecycles.
 
 
+
+---
+
+## ADR-017: Timer is a tool inside the Rungs app, not a separate PWA
+
+**Date**: 2026-08-21
+**Status**: accepted (built - Rungs plan step 30)
+
+**Context**: A poolside swimming stopwatch was wanted, initially framed as its own PWA at `watch.rungs.co.za`. It shares nothing with the ladder domain: no data, no auth, no server work at all - the whole run is archived by taking a phone screenshot. Rungs is a personal project on a single always-on Fly machine, so avoiding new infrastructure and a second deploy pipeline was an explicit goal.
+
+**Decision**: Ship it as a public top-level route `/timer` in the existing app. `isPublicRoute` in `lib/auth-rules.ts` lets it past the proxy so an expired session never bounces it to OAuth mid-swim; a new `toolLinks()` group in `lib/nav.ts`, appended in `AdminMenu` for any role, surfaces it in the header hamburger for signed-in staff. Pure logic lives in `lib/timer.ts` over absolute wall-clock timestamps; `components/stopwatch.tsx` owns only `requestAnimationFrame`, the Screen Wake Lock, and `localStorage`. No new origin, no second manifest, no new infrastructure.
+
+**Rejected**:
+- **Separate repo + Fly app.** Genuinely isolated (Rungs changes could never break it) and near-free on Fly with `auto_stop_machines`, but it buys two deploy pipelines, two Dockerfiles, and two Next/Node upgrades forever for a weekend tool - the expensive kind of cheap.
+- **`watch.rungs.co.za` on the same Fly app.** Adds host-rewriting in `proxy.ts`, two cross-host redirect edges, a DNS record and a cert, while removing no coupling at all: same build, same `/sw.js`, same deploy, same `node_modules`. The routing complexity of a separate app with none of the isolation that would justify it.
+- **A per-scope `manifest-timer.json`** for a distinct home-screen icon on the same origin. Viable on Android, unverified on iOS, and it requires lifting `SiteHeader`, `BottomNavBar` and `auth()` out of `app/layout.tsx` into an `app/(main)/` route group first.
+
+**Consequence**: There is no separate home-screen icon - the Timer is reached by opening Rungs. This extends rather than contradicts ADR-013's single shared PWA identity. Two things are knowingly accepted: past ten laps the list scrolls, so a screenshot loses the top rows; and a first-ever offline hit on `/timer` falls back to `/~offline`, since App Router pages are not in the Serwist precache manifest (after one online visit `defaultCache` covers it). The per-scope manifest remains a cheap future upgrade if the extra tap becomes annoying, and the subdomain is cheap on top of that. One incidental fix: appending tools means the hamburger is never empty for a staff user, where previously a SCORER off a league route got no menu at all.

@@ -77,6 +77,7 @@ No writing all tests up front. No testing internal collaborators. Single commit 
 | 27 | [Session intake deepening — unify submit/edit, fix duplicate-Player bug](steps/step-27-session-intake-deepening.md) | done | 26 |
 | 28 | [Share from session history + draft autosave](steps/step-28-share-from-history-draft-autosave.md) | done | 27 |
 | 29 | [Update documentation](steps/step-29-update-docs.md) | complete | 28 |
+| 30 | [Timer - a swimming stopwatch inside Rungs](steps/step-30-timer.md) | complete | 29 |
 
 > Risk isolation: **step 19** (data migration over live prod data) and **step 25**
 > (Fly app/DB + domain rename to `rungs.co.za` — hard to reverse, touches GitHub
