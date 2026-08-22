@@ -89,7 +89,13 @@ test("a touch device shows a Share button on a history card and shares", async (
     () => (window as unknown as { __shared: string[] }).__shared,
   );
   expect(shared).toHaveLength(1);
-  expect(shared[0]).toContain(`Scores: ${names[0]} 3`);
+  // The whole roster line, in order. P0/P1 are tied on 3 and P2/P3 on 1, so this
+  // also pins the wins-then-name tie-break the page query relies on — assert the
+  // full line, because a partial `toContain` on one tied name passes or fails on
+  // whatever order Postgres felt like returning.
+  expect(shared[0]).toContain(
+    `Scores: ${names[0]} 3, ${names[1]} 3, ${names[2]} 1, ${names[3]} 1`,
+  );
   expect(shared[0]).toContain("Ladder:");
 });
 

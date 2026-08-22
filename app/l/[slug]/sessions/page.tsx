@@ -41,7 +41,13 @@ export default async function SessionsPage({
       playerCount: true,
       inferredGames: true,
       sessionPlayers: {
-        orderBy: { wins: "desc" },
+        // Name breaks the wins tie so the roster order is total. Without it
+        // Postgres is free to return equal-wins rows in any order, and it does:
+        // Prisma loads this relation for every card on the page in one
+        // `sessionId = ANY(...) ORDER BY wins DESC` query, whose sort is not
+        // stable, so a tied pair flips order as the table grows. That order is
+        // what the card list and the share text both render.
+        orderBy: [{ wins: "desc" }, { player: { name: "asc" } }],
         select: { wins: true, player: { select: { name: true } } },
       },
     },
