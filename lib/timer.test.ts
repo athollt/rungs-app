@@ -5,6 +5,8 @@ import {
   fastestLapIndex,
   formatDuration,
   lapRows,
+  lapSummary,
+  paceBarPercent,
   restoreOrDiscard,
   type TimerRun,
 } from "@/lib/timer";
@@ -86,6 +88,51 @@ describe("fastestLapIndex", () => {
   it("keeps the earliest lap on a tie", () => {
     // laps of 3.0s, 3.0s
     expect(fastestLapIndex(rowsFor([3_000, 6_000]))).toBe(1);
+  });
+});
+
+describe("lapSummary", () => {
+  const rowsFor = (deltas: number[]) => {
+    let t = 0;
+    return lapRows({
+      startedAt: 0,
+      stoppedAt: null,
+      lapMarks: deltas.map((d) => (t += d)),
+    });
+  };
+
+  it("is null with fewer than two laps — nothing to summarise", () => {
+    expect(lapSummary([])).toBeNull();
+    expect(lapSummary(rowsFor([41_220]))).toBeNull();
+  });
+
+  it("reports average, spread, fastest and slowest", () => {
+    expect(lapSummary(rowsFor([41_220, 39_870, 37_640, 44_150]))).toEqual({
+      averageMs: 40_720,
+      spreadMs: 6_510,
+      fastestMs: 37_640,
+      slowestMs: 44_150,
+    });
+  });
+
+  it("rounds a fractional average to whole milliseconds", () => {
+    expect(lapSummary(rowsFor([1_000, 1_001]))?.averageMs).toBe(1_001);
+  });
+});
+
+describe("paceBarPercent", () => {
+  it("puts the fastest lap at the floor and the slowest at full width", () => {
+    expect(paceBarPercent(37_640, 37_640, 44_150)).toBe(30);
+    expect(paceBarPercent(44_150, 37_640, 44_150)).toBe(100);
+  });
+
+  it("places a mid lap proportionally between them", () => {
+    expect(paceBarPercent(40_895, 37_640, 44_150)).toBeCloseTo(65, 5);
+  });
+
+  // Every lap identical (or a single lap) has no range to scale across.
+  it("is full width when there is no spread", () => {
+    expect(paceBarPercent(40_000, 40_000, 40_000)).toBe(100);
   });
 });
 

@@ -2528,3 +2528,38 @@ intake deepening + share from history + draft autosave).
 1. Airplane mode, open the installed PWA, navigate to Timer — loads and runs.
 2. Start a run, lock the phone, wait, unlock — correct elapsed time, screen stays awake.
 3. Ten laps fit in one screenshot with no scrolling.
+
+---
+
+## Step 30.1 — Timer: pace bars + lap summary
+
+**Date**: 2026-08-22
+
+### Delivered
+
+- **Pace bar** in each lap row, filling the dead space between the Lap and Total columns. Width is the lap's position within the run's own fastest-to-slowest range, so the shape of a set (held pace, or drifted) reads off a screenshot without parsing digits.
+- **Summary strip** below the laps: average, spread, fastest, slowest. Spread is the pacing number — whether the set held together.
+- Lap time bumped to `1.05rem`, Total dropped to `text-xs` muted: the lap is the figure you read, the total is reference.
+- New pure helpers in `lib/timer.ts`: `lapSummary` (null below two laps) and `paceBarPercent`. 6 new unit tests.
+
+### Deviations from spec
+
+- **The pace bar does not use a zero baseline.** Scaling 0-to-slowest was built first and rejected on sight: swim splits cluster in a narrow band, so 37.64s and 44.15s rendered as near-identical bars and the feature was useless. It now scales across the run's own range with a 30% floor. The trade is that a tight set looks dramatic, which is why the summary strip reports the actual spread next to it.
+- **The summary is one 4-across row, not the 2x2 grid** that was mocked. The 2x2 pushed a ten-lap set past a single phone screen, and the screenshot is the archive.
+- `slowestLapMs` was added and then removed within this step - `lapSummary.slowestMs` superseded it before it shipped.
+
+### Known limitation
+
+- The first lap is structurally faster (dive), so the fastest-lap highlight will usually land on lap 1. Deliberately not corrected: excluding lap 1 from the scale is its own distortion. Flagged and accepted.
+
+### Validation results
+
+- `npm run build` — passes, `/timer` still a dynamic route.
+- `npm run test` — 281 passed / 45 files.
+- `npm run lint` — clean.
+- `npx playwright test e2e/timer.spec.ts` — 2 passed.
+- Visual check at 390x844: ten laps plus the summary strip fit one screen with ~150px spare; bars visibly differentiate across a 6.51s spread.
+
+### Note on the test environment
+
+The full `npm run test` picks up a duplicate copy of the suite when a git worktree exists under `.claude/worktrees/` (`.claude` is a symlink, and vitest globs through it) — the same symlink-traversal class of problem as ADR-005. Run `npx vitest run --exclude '**/.claude/**'` while a worktree session is active.

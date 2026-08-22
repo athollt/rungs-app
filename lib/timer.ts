@@ -59,6 +59,47 @@ export function fastestLapIndex(rows: LapRow[]): number | null {
   return rows.reduce((best, row) => (row.lapMs < best.lapMs ? row : best)).index;
 }
 
+export interface LapSummary {
+  averageMs: number;
+  spreadMs: number;
+  fastestMs: number;
+  slowestMs: number;
+}
+
+// Null below two laps — an average of one lap is just that lap, and a spread of
+// zero says nothing. Spread (slowest minus fastest) is the pacing number: it says
+// whether the set held together or came apart.
+export function lapSummary(rows: LapRow[]): LapSummary | null {
+  if (rows.length < 2) return null;
+  const times = rows.map((r) => r.lapMs);
+  const fastestMs = Math.min(...times);
+  const slowestMs = Math.max(...times);
+  return {
+    averageMs: Math.round(times.reduce((a, b) => a + b, 0) / times.length),
+    spreadMs: slowestMs - fastestMs,
+    fastestMs,
+    slowestMs,
+  };
+}
+
+// The pace bar's floor, as a percentage. The bar is scaled across the run's own
+// range (fastest → slowest), NOT from zero: swim splits cluster in a narrow band,
+// so a zero baseline renders 37s and 44s as near-identical bars and the shape of
+// the set becomes unreadable. The trade is that a tight set looks dramatic, which
+// is why the summary strip reports the actual spread alongside it.
+const PACE_BAR_FLOOR = 30;
+
+export function paceBarPercent(
+  lapMs: number,
+  fastestMs: number,
+  slowestMs: number,
+): number {
+  const span = slowestMs - fastestMs;
+  if (span <= 0) return 100;
+  const ratio = (lapMs - fastestMs) / span;
+  return PACE_BAR_FLOOR + ratio * (100 - PACE_BAR_FLOOR);
+}
+
 // Aged against startedAt, not stoppedAt: a run left ticking overnight must be
 // discarded rather than restored as a 14-hour ghost.
 export function restoreOrDiscard(

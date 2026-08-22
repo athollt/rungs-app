@@ -18,6 +18,8 @@ import {
   fastestLapIndex,
   formatDuration,
   lapRows,
+  lapSummary,
+  paceBarPercent,
   restoreOrDiscard,
   type TimerRun,
 } from "@/lib/timer";
@@ -212,6 +214,7 @@ export function Stopwatch() {
 
   const rows = run ? lapRows(run) : [];
   const fastest = fastestLapIndex(rows);
+  const summary = lapSummary(rows);
   const elapsed = run && now !== null ? elapsedMs(run, now) : 0;
   // Live until Start, then frozen at the start timestamp: a screenshot should
   // record when the swim happened, not when the screenshot was taken.
@@ -277,44 +280,100 @@ export function Stopwatch() {
           {running ? "Tap Lap at each wall." : "Tap Start to begin."}
         </p>
       ) : (
-        <Table className="mt-5">
-          <TableHeader>
-            <TableRow>
-              <TableHead className="text-muted-foreground w-8 px-2 text-xs font-medium">
-                #
-              </TableHead>
-              <TableHead className="text-muted-foreground px-2 text-xs font-medium">
-                Lap
-              </TableHead>
-              <TableHead className="text-muted-foreground px-2 text-right text-xs font-medium">
-                Total
-              </TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {rows.map((row) => (
-              <TableRow key={row.index}>
-                <TableCell className="text-muted-foreground px-2 py-1.5 text-xs">
-                  {row.index}
-                </TableCell>
-                <TableCell
-                  className={cn(
-                    "px-2 py-1.5 font-mono tabular-nums",
-                    row.index === fastest && "text-primary font-semibold",
-                  )}
-                >
-                  {formatDuration(row.lapMs)}
-                  {row.index === fastest && (
-                    <span className="sr-only"> (fastest lap)</span>
-                  )}
-                </TableCell>
-                <TableCell className="text-muted-foreground px-2 py-1.5 text-right font-mono tabular-nums">
-                  {formatDuration(row.totalMs)}
-                </TableCell>
+        <>
+          <Table className="mt-5">
+            <TableHeader>
+              <TableRow>
+                <TableHead className="text-muted-foreground w-8 px-2 text-xs font-medium">
+                  #
+                </TableHead>
+                <TableHead className="text-muted-foreground w-[5.5rem] px-2 text-xs font-medium">
+                  Lap
+                </TableHead>
+                {/* The bar column is unlabelled — it is the Lap figure drawn, not
+                    a separate measure, and a header would imply otherwise. */}
+                <TableHead className="px-2" />
+                <TableHead className="text-muted-foreground w-[4.5rem] px-2 text-right text-xs font-medium">
+                  Total
+                </TableHead>
               </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+            </TableHeader>
+            <TableBody>
+              {rows.map((row) => (
+                <TableRow key={row.index}>
+                  <TableCell className="text-muted-foreground px-2 py-1 text-xs">
+                    {row.index}
+                  </TableCell>
+                  <TableCell
+                    className={cn(
+                      "px-2 py-1 font-mono text-[1.05rem] tabular-nums",
+                      row.index === fastest && "text-primary font-semibold",
+                    )}
+                  >
+                    {formatDuration(row.lapMs)}
+                    {row.index === fastest && (
+                      <span className="sr-only"> (fastest lap)</span>
+                    )}
+                  </TableCell>
+                  {/* Pace bar: lap time as a share of the slowest lap in this run,
+                      so the shape of the set (held pace, or came apart) reads at a
+                      glance off the screenshot without parsing a column of digits.
+                      Comparative, not absolute — the scale moves with the run. */}
+                  <TableCell className="w-full px-2 py-1" aria-hidden>
+                    <span
+                      className={cn(
+                        "block h-[7px] rounded-full",
+                        row.index === fastest ? "bg-primary" : "bg-primary/35",
+                      )}
+                      style={{
+                        width: `${
+                          summary
+                            ? paceBarPercent(
+                                row.lapMs,
+                                summary.fastestMs,
+                                summary.slowestMs,
+                              )
+                            : 100
+                        }%`,
+                      }}
+                    />
+                  </TableCell>
+                  <TableCell className="text-muted-foreground px-2 py-1 text-right font-mono text-xs tabular-nums">
+                    {formatDuration(row.totalMs)}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+
+          {/* One compact row rather than a 2x2 grid: with ten laps above it, a
+              taller block pushes the set past a single screen, and the screenshot
+              is the archive. */}
+          {summary && (
+            <dl className="mt-3 grid grid-cols-4 gap-1.5">
+              {[
+                { label: "Average", value: summary.averageMs },
+                { label: "Spread", value: summary.spreadMs },
+                { label: "Fastest", value: summary.fastestMs },
+                { label: "Slowest", value: summary.slowestMs },
+              ].map((stat) => (
+                <div key={stat.label} className="bg-muted/50 rounded-lg px-2 py-1.5">
+                  <dt className="text-muted-foreground text-[0.65rem]">
+                    {stat.label}
+                  </dt>
+                  <dd
+                    className={cn(
+                      "font-mono text-[0.8rem] tabular-nums",
+                      stat.label === "Fastest" && "text-primary",
+                    )}
+                  >
+                    {formatDuration(stat.value)}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+          )}
+        </>
       )}
     </PageShell>
   );
