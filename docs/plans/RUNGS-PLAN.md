@@ -78,6 +78,7 @@ No writing all tests up front. No testing internal collaborators. Single commit 
 | 28 | [Share from session history + draft autosave](steps/step-28-share-from-history-draft-autosave.md) | done | 27 |
 | 29 | [Update documentation](steps/step-29-update-docs.md) | complete | 28 |
 | 30 | [Timer - a swimming stopwatch inside Rungs](steps/step-30-timer.md) | complete | 29 |
+| 30.1-30.4 | Timer refinements from phone testing - pace bars, median-centred diverging bars, centre axis + short-set scale, deviation column. No step files; see `CHANGELOG.md`. | complete | 30 |
 | 30.5 | [Timer entry time](steps/step-30.5-entry-time.md) | complete | 30 |
 
 > Risk isolation: **step 19** (data migration over live prod data) and **step 25**

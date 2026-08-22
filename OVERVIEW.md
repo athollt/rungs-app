@@ -85,8 +85,11 @@ This is why most behaviour is testable without a database or the OAuth runtime.
 - **Presentation helpers** — `public-ladder.ts`, `session-history.ts`, `player-trend.ts`,
   `nav.ts` (incl. `toolLinks` — the hamburger's non-management group), `default-settings.ts`.
 - **Timer** — [`timer.ts`](lib/timer.ts): pure stopwatch logic over absolute wall-clock
-  timestamps (format, elapsed, lap derivation, the 12-hour stale-run rule). No React, no
-  storage — `components/stopwatch.tsx` owns the rAF loop, wake lock, and `localStorage`
+  timestamps. Formatting (`formatDuration`, `formatDelta`), run state (`elapsedMs`,
+  `lapRows`, the 12-hour `restoreOrDiscard` rule), lap analytics (`lapSummary` →
+  median/spread/fastest/slowest + the bar scale, and `paceDeviation`), and entry-time
+  digit entry (`normaliseEntryDigits`, `formatEntryDigits`, `nextEntryDigits`). No React,
+  no storage — `components/stopwatch.tsx` owns the rAF loop, wake lock, and `localStorage`
   ([ADR-017](docs/plans/DECISIONS.md)).
 - **Demo data** — `sample-data.ts` (deterministic generator used by `seed-sample.ts`).
 
@@ -156,9 +159,12 @@ removing its children in order — see `league-provisioning-store.ts`).
   its `LeagueScorer` grants. **Access request** — an in-app request by a signed-in non-staff
   user to become a Scorer (or to set up a new League).
 - **Timer** — a client-only stopwatch at `/timer`; a *tool*, not part of the ladder domain. Not
-  league-scoped, stores nothing server-side, and its record of a run is a phone screenshot
-  ([ADR-017](docs/plans/DECISIONS.md)). A **lap** here is a stopwatch split, unrelated to a
-  Session. See
+  league-scoped, stores nothing server-side, and its record of a **run** (one Start-to-Stop
+  timing) is a phone screenshot ([ADR-017](docs/plans/DECISIONS.md)). Its vocabulary is
+  deliberately separate from the ladder's: a **lap** is a stopwatch split (nothing to do with a
+  Session), **entry time** is the seed time a swimmer is entered with for a race, and the pace
+  bars measure each lap against the run's **median** rather than its mean — a racing dive makes
+  lap 1 an outlier that would drag a mean. **Spread** is slowest minus fastest. See
   [`docs/RATING-ALGORITHM.md`](docs/RATING-ALGORITHM.md) for every algorithm term.
 
 ## Where to read more

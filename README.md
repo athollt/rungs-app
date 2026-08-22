@@ -39,6 +39,15 @@ npm run dev                          # http://localhost:3001
 > `SEED_ADMIN_PASSWORD` (default `localdev`). Google OAuth also works locally if you set the
 > client id/secret.
 
+> **Testing on a phone:** the dev server is reachable from another device on the same
+> network at `http://<your-mac's-LAN-IP>:3001`. `next dev` rejects the HMR websocket from any
+> non-localhost origin, which leaves the page rendering from SSR with every button dead — so
+> `next.config.ts` allowlists `192.168.*.*` and `10.*.*.*` via `allowedDevOrigins` (dev only;
+> `next build` ignores it). A `172.16-31.*` network is not covered — dead buttons over LAN is
+> the symptom, and adding the range is the fix. Note the LAN address is **not a secure
+> context**, so `navigator.wakeLock`, the service worker, and PWA install are all disabled
+> there — those need HTTPS, i.e. production.
+
 Optional demo data (deterministic sample roster + sessions):
 
 ```bash
