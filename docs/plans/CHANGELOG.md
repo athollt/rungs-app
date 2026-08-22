@@ -2623,3 +2623,30 @@ The floor also softens the exaggeration flagged as a known trade in 30.1 — a g
 - `npm run lint` — clean.
 - `npx playwright test e2e/timer.spec.ts` — 2 passed.
 - Visual check at 390x844 across three shapes: a 7-lap set (odd, median lap shows the dot on the axis), two near-identical laps (stubs), two very different laps (full width).
+
+---
+
+## Step 30.4 — Timer: visible deviation column + larger summary
+
+**Date**: 2026-08-22
+
+From testing at a real race (a 100m backstroke, 4 laps).
+
+### Delivered
+
+- **A `+/-` column beside the bar** showing the signed gap from the median ("-1.71", "+1.23", "0.00"), tinted to match the bar. The figure was already in the screen-reader text; this surfaces it. Placed beside the bar rather than inside it: a short bar has no room for a label, and a column keeps every figure on one right edge.
+- **Taller bars** (7px to 13px) and a larger median dot (7px to 9px).
+- New pure `formatDelta` — signed, compact, drops the minutes unless the gap genuinely exceeds one, which on a lap split it rarely does. 3 unit tests.
+- Summary values scaled up to match the lap figures.
+
+### Deviations from spec
+
+- **The summary could not simply take the lap font size.** Four `mm:ss.hh` values on one row is the binding constraint: at a fixed 1.05rem each value needs 81px in an 85px cell with 73px of usable width, so every cell overflowed — measured, not estimated. The size is now `clamp(0.75rem, 4.1vw, 1.05rem)`, with gap and padding tightened. Measured across widths: 360px gives 14.76px, 390px gives 15.99px, and at 430px it reaches 16.8px, exactly matching the laps. No overflow at any of the three, and the page never scrolls horizontally.
+
+### Validation results
+
+- `npm run build` — passes, `/timer` still dynamic.
+- `npm run test` — 288 passed / 45 files.
+- `npm run lint` — clean.
+- `npx playwright test e2e/timer.spec.ts` — 2 passed.
+- Visual check: the real 4-lap race renders correctly, and a 10-lap set with the taller bars and larger stats still fits one 390x844 screen with ~100px spare.

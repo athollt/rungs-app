@@ -15,6 +15,7 @@ import {
 import { cn } from "@/lib/utils";
 import {
   elapsedMs,
+  formatDelta,
   formatDuration,
   lapRows,
   lapSummary,
@@ -290,8 +291,11 @@ export function Stopwatch() {
                 </TableHead>
                 {/* The bar column is unlabelled — it is the Lap figure drawn, not
                     a separate measure, and a header would imply otherwise. */}
-                <TableHead className="px-2" />
-                <TableHead className="text-muted-foreground w-[4.5rem] px-2 text-right text-xs font-medium">
+                <TableHead className="px-1" />
+                <TableHead className="text-muted-foreground w-[3.25rem] px-1 text-right text-xs font-medium">
+                  +/-
+                </TableHead>
+                <TableHead className="text-muted-foreground w-[4.25rem] px-1.5 text-right text-xs font-medium">
                   Total
                 </TableHead>
               </TableRow>
@@ -321,7 +325,7 @@ export function Stopwatch() {
                       const bar = (
                         <span
                           className={cn(
-                            "block h-[7px]",
+                            "block h-[13px]",
                             d.side === "faster"
                               ? "bg-chart-4 rounded-r-full"
                               : "bg-chart-5 rounded-l-full",
@@ -349,7 +353,7 @@ export function Stopwatch() {
                             {d.side === "even" && (
                               <span
                                 aria-hidden
-                                className="bg-muted-foreground/60 absolute left-1/2 size-[7px] -translate-x-1/2 rounded-full"
+                                className="bg-muted-foreground/60 absolute left-1/2 size-[9px] -translate-x-1/2 rounded-full"
                               />
                             )}
                           </span>
@@ -362,7 +366,31 @@ export function Stopwatch() {
                       );
                     })()}
                   </TableCell>
-                  <TableCell className="text-muted-foreground px-2 py-1 text-right font-mono text-xs tabular-nums">
+                  {/* The bar shows the shape, this shows the size of it. Beside the
+                      bar rather than inside it: a short bar has no room for a label,
+                      and a column keeps every figure on the same right edge. */}
+                  <TableCell
+                    className={cn(
+                      "px-1 py-1 text-right font-mono text-xs tabular-nums",
+                      !summary && "text-muted-foreground",
+                      summary &&
+                        (() => {
+                          const d = paceDeviation(
+                            row.lapMs,
+                            summary.medianMs,
+                            summary.barScaleMs,
+                          );
+                          if (d.side === "faster") return "text-chart-4";
+                          if (d.side === "slower") return "text-chart-5";
+                          return "text-muted-foreground";
+                        })(),
+                    )}
+                  >
+                    {summary
+                      ? formatDelta(row.lapMs - summary.medianMs)
+                      : formatDelta(0)}
+                  </TableCell>
+                  <TableCell className="text-muted-foreground px-1.5 py-1 text-right font-mono text-xs tabular-nums">
                     {formatDuration(row.totalMs)}
                   </TableCell>
                 </TableRow>
@@ -374,7 +402,7 @@ export function Stopwatch() {
               taller block pushes the set past a single screen, and the screenshot
               is the archive. */}
           {summary && (
-            <dl className="mt-3 grid grid-cols-4 gap-1.5">
+            <dl className="mt-3 grid grid-cols-4 gap-1">
               {[
                 // Median, not average — it is the line the bars above are drawn
                 // from, so the strip has to name the same number.
@@ -383,13 +411,18 @@ export function Stopwatch() {
                 { label: "Fastest", value: summary.fastestMs },
                 { label: "Slowest", value: summary.slowestMs },
               ].map((stat) => (
-                <div key={stat.label} className="bg-muted/50 rounded-lg px-2 py-1.5">
+                <div key={stat.label} className="bg-muted/50 rounded-lg px-1 py-1.5">
                   <dt className="text-muted-foreground text-[0.65rem]">
                     {stat.label}
                   </dt>
+                  {/* Matched to the lap figures, but four `mm:ss.hh` values across
+                      one row is the binding constraint: at a fixed 1.05rem they
+                      overflow below ~430px. Scales with the viewport instead, so a
+                      narrow phone shrinks rather than clipping, and a wide one gets
+                      the full lap size. */}
                   <dd
                     className={cn(
-                      "font-mono text-[0.8rem] tabular-nums",
+                      "font-mono text-[clamp(0.75rem,4.1vw,1.05rem)] tabular-nums",
                       // Matches the bar colours, so the strip doubles as the
                       // legend and no separate key is needed.
                       stat.label === "Fastest" && "text-chart-4",

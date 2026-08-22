@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   STALE_RUN_MS,
   elapsedMs,
+  formatDelta,
   formatDuration,
   lapRows,
   lapSummary,
@@ -28,6 +29,22 @@ describe("formatDuration", () => {
 
   it("clamps a negative duration to zero", () => {
     expect(formatDuration(-500)).toBe("00:00.00");
+  });
+});
+
+describe("formatDelta", () => {
+  it("signs the gap and drops the minutes on a normal split", () => {
+    expect(formatDelta(1_230)).toBe("+1.23");
+    expect(formatDelta(-1_720)).toBe("-1.72");
+    expect(formatDelta(-420)).toBe("-0.42");
+  });
+
+  it("shows a bare zero for a lap sitting on the median", () => {
+    expect(formatDelta(0)).toBe("0.00");
+  });
+
+  it("keeps the minutes when the gap is over a minute", () => {
+    expect(formatDelta(65_430)).toBe("+1:05.43");
   });
 });
 

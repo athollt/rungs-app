@@ -40,6 +40,21 @@ export function formatDuration(ms: number): string {
     : `${pad2(minutes)}:${tail}`;
 }
 
+// A signed distance from the median, compact enough to sit beside a bar: "+1.23",
+// "-0.42", "0.00". Drops the leading minutes unless the gap is genuinely over a
+// minute, which on a lap split it almost never is.
+export function formatDelta(deltaMs: number): string {
+  if (deltaMs === 0) return "0.00";
+  const sign = deltaMs < 0 ? "-" : "+";
+  const abs = Math.abs(deltaMs);
+  const hundredths = Math.floor(abs / 10) % 100;
+  const seconds = Math.floor(abs / 1000) % 60;
+  const minutes = Math.floor(abs / 60_000);
+  return minutes > 0
+    ? `${sign}${minutes}:${pad2(seconds)}.${pad2(hundredths)}`
+    : `${sign}${seconds}.${pad2(hundredths)}`;
+}
+
 export function elapsedMs(run: TimerRun, now: number): number {
   return (run.stoppedAt ?? now) - run.startedAt;
 }
