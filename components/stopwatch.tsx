@@ -17,8 +17,11 @@ import {
   elapsedMs,
   formatDelta,
   formatDuration,
+  formatEntryDigits,
   lapRows,
   lapSummary,
+  nextEntryDigits,
+  normaliseEntryDigits,
   paceDeviation,
   restoreOrDiscard,
   type TimerRun,
@@ -33,6 +36,9 @@ import {
 // is stored apart from the run so it survives a run being discarded as stale.
 const RUN_KEY = "rungs-timer";
 const TITLE_KEY = "rungs-timer-title";
+// Like the title, this describes the event rather than the run, so it outlives a
+// Reset — you time the same race again with the same seed time.
+const ENTRY_KEY = "rungs-timer-entry";
 const MAX_TITLE = 40;
 // How long Reset stays armed after the first tap.
 const CONFIRM_MS = 4000;
@@ -76,6 +82,9 @@ function formatClock(ts: number): string {
 export function Stopwatch() {
   const [run, setRun] = useState<TimerRun | null>(null);
   const [title, setTitle] = useState("");
+  // Stored as the bare digits typed, not the formatted string — the display and
+  // the caret behaviour both derive from them.
+  const [entryDigits, setEntryDigits] = useState("");
   // null until the mount effect runs, so the server-rendered shell (zeroed clock,
   // no date) matches the first client render — no hydration mismatch.
   const [now, setNow] = useState<number | null>(null);
@@ -97,6 +106,9 @@ export function Stopwatch() {
     setNow(mountedAt);
     setRun(restored);
     setTitle(window.localStorage.getItem(TITLE_KEY) ?? "");
+    setEntryDigits(
+      normaliseEntryDigits(window.localStorage.getItem(ENTRY_KEY) ?? ""),
+    );
   }, []);
 
   // One clock, two jobs: rAF while a run is going (smooth hundredths), and a 1s
@@ -212,6 +224,16 @@ export function Stopwatch() {
     }
   }
 
+  // The input carries the formatted string, so strip it back to digits: typing
+  // appends and backspacing removes one, both landing on the right-hand end.
+  function changeEntry(value: string) {
+    const next = nextEntryDigits(entryDigits, value);
+    setEntryDigits(next);
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(ENTRY_KEY, next);
+    }
+  }
+
   const rows = run ? lapRows(run) : [];
   const summary = lapSummary(rows);
   const elapsed = run && now !== null ? elapsedMs(run, now) : 0;
@@ -235,7 +257,25 @@ export function Stopwatch() {
           <Pencil aria-hidden className="text-muted-foreground/60 size-4 shrink-0" />
         </span>
       }
-      subtitle={clockLine}
+      subtitle={
+        <span className="flex items-baseline justify-between gap-3">
+          <span className="truncate">{clockLine}</span>
+          {/* Seed time for the race, beside the timestamp so both land in the
+              screenshot. Digits fill mm:ss.hh from the right, and inputMode
+              numeric keeps it to a keypad on a phone. */}
+          <span className="flex shrink-0 items-baseline gap-1.5">
+            <span>Entry</span>
+            <input
+              value={formatEntryDigits(entryDigits)}
+              onChange={(e) => changeEntry(e.target.value)}
+              inputMode="numeric"
+              placeholder="--.--"
+              aria-label="Entry time"
+              className="placeholder:text-muted-foreground/40 text-foreground w-[4.75rem] bg-transparent text-right font-mono tabular-nums outline-none"
+            />
+          </span>
+        </span>
+      }
     >
       <div
         role="timer"

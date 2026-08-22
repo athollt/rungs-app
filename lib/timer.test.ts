@@ -4,8 +4,11 @@ import {
   elapsedMs,
   formatDelta,
   formatDuration,
+  formatEntryDigits,
   lapRows,
   lapSummary,
+  nextEntryDigits,
+  normaliseEntryDigits,
   paceDeviation,
   restoreOrDiscard,
   type TimerRun,
@@ -45,6 +48,73 @@ describe("formatDelta", () => {
 
   it("keeps the minutes when the gap is over a minute", () => {
     expect(formatDelta(65_430)).toBe("+1:05.43");
+  });
+});
+
+describe("entry time digit entry", () => {
+  it("keeps only digits, newest six", () => {
+    expect(normaliseEntryDigits("1:30.45")).toBe("13045");
+    expect(normaliseEntryDigits("abc")).toBe("");
+    expect(normaliseEntryDigits("12345678")).toBe("345678");
+  });
+
+  it("fills mm:ss.hh from the right, showing only what has been typed", () => {
+    expect(formatEntryDigits("")).toBe("");
+    expect(formatEntryDigits("4")).toBe("00.04");
+    expect(formatEntryDigits("345")).toBe("03.45");
+    expect(formatEntryDigits("3045")).toBe("30.45");
+    expect(formatEntryDigits("13045")).toBe("1:30.45");
+    expect(formatEntryDigits("123045")).toBe("12:30.45");
+  });
+
+});
+
+describe("nextEntryDigits", () => {
+  // Typing a whole seed time one key at a time, the way it happens on a phone.
+  it("appends a keystroke without re-absorbing the display padding", () => {
+    let digits = "";
+    const shown: string[] = [];
+    for (const key of "11250") {
+      digits = nextEntryDigits(digits, formatEntryDigits(digits) + key);
+      shown.push(formatEntryDigits(digits));
+    }
+    expect(shown).toEqual([
+      "00.01",
+      "00.11",
+      "01.12",
+      "11.25",
+      "1:12.50",
+    ]);
+    expect(digits).toBe("11250");
+  });
+
+  it("drops one digit on a backspace", () => {
+    const shown = formatEntryDigits("11250"); // "1:12.50"
+    expect(nextEntryDigits("11250", shown.slice(0, -1))).toBe("1125");
+  });
+
+  it("is unchanged when the edit alters no digits", () => {
+    expect(nextEntryDigits("1125", formatEntryDigits("1125"))).toBe("1125");
+  });
+
+  // Select-all then delete wipes several digits in one edit. Treating that as a
+  // single backspace would leave the field stubbornly almost-full.
+  it("clears the buffer when the whole field is emptied", () => {
+    expect(nextEntryDigits("11250", "")).toBe("");
+    expect(nextEntryDigits("1125", "")).toBe("");
+  });
+
+  it("removes exactly as many digits as the edit dropped", () => {
+    // "1:12.50" is 5 digits shown; leaving "1:1" shows 2, so three come off.
+    expect(nextEntryDigits("11250", "1:1")).toBe("11");
+  });
+
+  it("reaches a full six digits", () => {
+    let digits = "";
+    for (const key of "123045") {
+      digits = nextEntryDigits(digits, formatEntryDigits(digits) + key);
+    }
+    expect(formatEntryDigits(digits)).toBe("12:30.45");
   });
 });
 
