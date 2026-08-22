@@ -55,6 +55,52 @@ export function formatDelta(deltaMs: number): string {
     : `${sign}${seconds}.${pad2(hundredths)}`;
 }
 
+// Entry time (the seed time a swimmer is entered with) is typed as bare digits
+// filling from the right, the way a stopwatch or a microwave takes input: "3045"
+// is 30.45, "13045" is 1:30.45. Typing ":" and "." would mean the full keyboard
+// on a phone, where a numeric keypad is what you want at the poolside.
+const MAX_ENTRY_DIGITS = 6; // mm:ss.hh
+
+// Keeps only digits and caps the length, so the caller can store exactly what was
+// typed and re-derive both the display and the milliseconds from it.
+export function normaliseEntryDigits(input: string): string {
+  return input.replace(/\D/g, "").slice(-MAX_ENTRY_DIGITS);
+}
+
+// Digits laid out as mm:ss.hh, filling from the right and showing only as much as
+// has been typed: "" → "", "4" → "0.04", "345" → "3.45", "13045" → "1:30.45".
+export function formatEntryDigits(digits: string): string {
+  const d = normaliseEntryDigits(digits);
+  if (d === "") return "";
+  const padded = d.padStart(4, "0");
+  const hundredths = padded.slice(-2);
+  const seconds = padded.slice(-4, -2);
+  const minutes = padded.slice(0, -4);
+  return minutes === ""
+    ? `${seconds}.${hundredths}`
+    : `${Number(minutes)}:${seconds}.${hundredths}`;
+}
+
+// What the digit buffer becomes after one edit of the displayed field.
+//
+// The field shows a padded string ("00.11"), so the digits cannot simply be
+// stripped back out of it — the padding zeros would be re-absorbed as though the
+// user had typed them, and a minutes field would appear out of nowhere. Compare
+// digit COUNTS instead: one more than the display had means a character was
+// appended, one fewer means a backspace. The caret sits at the end of a
+// right-aligned field, so the added character is always the last one.
+export function nextEntryDigits(current: string, displayed: string): string {
+  const typed = displayed.replace(/\D/g, "");
+  const shown = formatEntryDigits(current).replace(/\D/g, "");
+  // Work off the SIZE of the change, not a single character: clearing the field
+  // (select-all then delete) removes several digits at once, and treating that as
+  // one backspace would leave the field stubbornly full.
+  const delta = typed.length - shown.length;
+  if (delta > 0) return normaliseEntryDigits(current + typed.slice(-delta));
+  if (delta < 0) return current.slice(0, delta);
+  return current;
+}
+
 export function elapsedMs(run: TimerRun, now: number): number {
   return (run.stoppedAt ?? now) - run.startedAt;
 }

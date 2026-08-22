@@ -2650,3 +2650,35 @@ From testing at a real race (a 100m backstroke, 4 laps).
 - `npm run lint` — clean.
 - `npx playwright test e2e/timer.spec.ts` — 2 passed.
 - Visual check: the real 4-lap race renders correctly, and a 10-lap set with the taller bars and larger stats still fits one 390x844 screen with ~100px spare.
+
+---
+
+## Step 30.5 — Timer entry time
+
+**Date**: 2026-08-22
+
+### Delivered
+
+- An **entry time** (the seed time a swimmer is entered with) captured to the right of the timestamp under the title, in the same `mm:ss.hh` format as the main readout, so both land in the screenshot.
+- **Digit entry** rather than free text: typing `:` and `.` means the full keyboard on a phone, so the field takes bare digits filling from the right with `inputMode="numeric"` for a keypad. `3045` is `30.45`, `13045` is `1:30.45`.
+- New pure helpers in `lib/timer.ts`: `normaliseEntryDigits`, `formatEntryDigits`, `nextEntryDigits`. 9 unit tests, plus a Playwright journey using real keystrokes.
+- Persisted under `rungs-timer-entry` and restored on mount. **Survives a Reset**, like the title — it describes the event, not the run.
+
+### Two bugs found and fixed during the step
+
+Both were in the digit-entry mechanism, and both were caught by driving the real input in a browser rather than by reasoning about it:
+
+- **Display padding was re-absorbed as typed input.** The field shows a padded string (`00.11`), so stripping the digits back out of it counted the padding zeros as keystrokes, and a minutes field appeared from nowhere mid-typing (`1`, `1` rendered `0:00.11`). `nextEntryDigits` now compares digit *counts* between the displayed value and the buffer's own rendering, and never re-parses the padding.
+- **Clearing the field removed only one digit.** The first version treated any shortening as a single backspace, so select-all-then-delete left the field almost full. It now sizes the change and removes exactly as many digits as the edit dropped.
+
+### Not built
+
+- No comparison of the final time against the entry time, and so no milliseconds conversion. It is the obvious thing an entry time is *for*, but it was not asked for, and AGENTS.md §3 rules out speculative abstractions. `entryDigitsToMs` was written, then removed unused before commit.
+
+### Validation results
+
+- `npm run build` — passes, `/timer` still dynamic.
+- `npm run test` — 296 passed / 45 files.
+- `npm run lint` — clean.
+- `npx playwright test` — **61 passed**, including a new journey that types `11250` with real keystrokes, asserts `1:12.50`, reloads and asserts it persisted.
+- Measured at 360px with the longest possible entry time (`12:30.45`) beside a full timestamp: the subtitle does not overflow and the page does not scroll horizontally.

@@ -53,3 +53,19 @@ test("timer restores an in-progress run across a reload", async ({ page }) => {
   await expect(page.getByRole("button", { name: "Stop" })).toBeVisible();
   await expect(page.getByRole("row")).toHaveCount(2);
 });
+
+// Step 30a. Digits fill mm:ss.hh from the right, and the value describes the
+// event rather than the run, so it outlives a reload.
+test("entry time takes digits from the right and survives a reload", async ({
+  page,
+}) => {
+  await page.goto("/timer");
+  const entry = page.getByLabel("Entry time");
+  await expect(entry).toHaveValue("");
+
+  await entry.pressSequentially("11250");
+  await expect(entry).toHaveValue("1:12.50");
+
+  await page.reload();
+  await expect(page.getByLabel("Entry time")).toHaveValue("1:12.50");
+});
