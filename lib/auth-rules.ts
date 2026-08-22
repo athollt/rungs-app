@@ -48,6 +48,10 @@ function isPublicRoute(pathname: string): boolean {
     pathname === "/" ||
     pathname === "/unauthorised" ||
     pathname === "/signin" ||
+    // The Timer (step 30, ADR-017) is a client-only tool: no data read, none
+    // written, so nothing to gate. It is surfaced in the hamburger for signed-in
+    // staff, but the route itself must not bounce an expired session to OAuth.
+    pathname === "/timer" ||
     pathname.startsWith("/api/auth/") ||
     pathname === "/sessions" ||
     isPublicSessionDetail(pathname) ||

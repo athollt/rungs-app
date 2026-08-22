@@ -51,10 +51,10 @@ This is why most behaviour is testable without a database or the OAuth runtime.
 
 | Path | What's there |
 |---|---|
-| [`app/`](app/) | Routes (App Router). Landing/switcher: `/`. Per-League under **`/l/[slug]/`** — public: ladder, `sessions`, `sessions/[id]`, `players/[id]`; scorer: `submit`, `sessions/[id]/edit`, `admin/{players,sessions,settings}`. Global-admin (top-level): `/admin/{users,leagues,access-requests}`. Plus `/signin`, `/request-access` (non-staff bounce), `/unauthorised`, `/~offline`. Server Actions in `**/actions.ts`. |
+| [`app/`](app/) | Routes (App Router). Landing/switcher: `/`. Per-League under **`/l/[slug]/`** — public: ladder, `sessions`, `sessions/[id]`, `players/[id]`; scorer: `submit`, `sessions/[id]/edit`, `admin/{players,sessions,settings}`. Global-admin (top-level): `/admin/{users,leagues,access-requests}`. Plus `/timer` (public stopwatch tool, ADR-017), `/signin`, `/request-access` (non-staff bounce), `/unauthorised`, `/~offline`. Server Actions in `**/actions.ts`. |
 | [`app/sw.ts`](app/sw.ts) | Serwist service-worker source (bundled to `public/sw.js` at build). |
 | [`lib/`](lib/) | Pure domain logic (see below) + the Prisma singleton and store adapters. |
-| [`components/`](components/) | App components (`site-header`, `session-form` (with draft autosave in submit mode), `share-button` (Web Share API, touch-only — ADR-009/016), `admin-menu`, `rating-trend-chart`, …) and `components/ui/` design-system primitives (`page-shell`, `card`, `badge`, `trend`, `bottom-nav`, …). |
+| [`components/`](components/) | App components (`site-header`, `session-form` (with draft autosave in submit mode), `share-button` (Web Share API, touch-only — ADR-009/016), `admin-menu`, `stopwatch` (the `/timer` tool — ADR-017), `rating-trend-chart`, …) and `components/ui/` design-system primitives (`page-shell`, `card`, `badge`, `trend`, `bottom-nav`, …). |
 | [`prisma/`](prisma/) | `schema.prisma`, `migrations/`, `seed.ts` (seeds the BSC + Padel Leagues, each with 15 settings, + the first admin), `seed-sample.ts` (opt-in demo data). |
 | [`auth.ts`](auth.ts) | Single Auth.js config (providers + `signIn`/`jwt`/`session` callbacks). |
 | [`proxy.ts`](proxy.ts) | Next 16 proxy (was `middleware.ts`) — route gating via `authorizeRoute`. |
@@ -83,7 +83,11 @@ This is why most behaviour is testable without a database or the OAuth runtime.
   validates, persists, triggers per-league recalc) backed by `session-write-store.ts`
   (Prisma `SessionWriteStore` adapter).
 - **Presentation helpers** — `public-ladder.ts`, `session-history.ts`, `player-trend.ts`,
-  `nav.ts`, `default-settings.ts`.
+  `nav.ts` (incl. `toolLinks` — the hamburger's non-management group), `default-settings.ts`.
+- **Timer** — [`timer.ts`](lib/timer.ts): pure stopwatch logic over absolute wall-clock
+  timestamps (format, elapsed, lap derivation, the 12-hour stale-run rule). No React, no
+  storage — `components/stopwatch.tsx` owns the rAF loop, wake lock, and `localStorage`
+  ([ADR-017](docs/plans/DECISIONS.md)).
 - **Demo data** — `sample-data.ts` (deterministic generator used by `seed-sample.ts`).
 
 ## Data model (`prisma/schema.prisma`)
@@ -109,7 +113,7 @@ removing its children in order — see `league-provisioning-store.ts`).
   The Credentials path stays staff-only. The `User` table stays staff-only; only *sessions*
   open up.
 - [`proxy.ts`](proxy.ts) gates on route **shape** only (DB-free): public `/l/{slug}` reads
-  open; scorer/admin shapes fall through to the auth gate. The real per-League check is at the
+  and `/timer` open; scorer/admin shapes fall through to the auth gate. The real per-League check is at the
   **page boundary** — `requireLeagueScorer` ([`league-access.ts`](lib/league-access.ts))
   resolves the slug→League and enforces the `LeagueScorer` grant (admin bypasses; ADR-012).
   Global-admin routes (`/admin/{users,leagues,access-requests}`) require `ADMIN`.
@@ -150,7 +154,11 @@ removing its children in order — see `league-provisioning-store.ts`).
   off the visible ladder but kept in history.
 - **Scorer** (per-League) / **Admin** (global) — the two staff roles; a Scorer's authority is
   its `LeagueScorer` grants. **Access request** — an in-app request by a signed-in non-staff
-  user to become a Scorer (or to set up a new League). See
+  user to become a Scorer (or to set up a new League).
+- **Timer** — a client-only stopwatch at `/timer`; a *tool*, not part of the ladder domain. Not
+  league-scoped, stores nothing server-side, and its record of a run is a phone screenshot
+  ([ADR-017](docs/plans/DECISIONS.md)). A **lap** here is a stopwatch split, unrelated to a
+  Session. See
   [`docs/RATING-ALGORITHM.md`](docs/RATING-ALGORITHM.md) for every algorithm term.
 
 ## Where to read more

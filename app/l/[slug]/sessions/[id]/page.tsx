@@ -48,7 +48,9 @@ export default async function SessionDetailPage({
       inferredGames: true,
       submittedBy: { select: { name: true } },
       sessionPlayers: {
-        orderBy: { wins: "desc" },
+        // Total order, as on the history list: wins alone leaves tied players
+        // in whatever order Postgres happens to return.
+        orderBy: [{ wins: "desc" }, { player: { name: "asc" } }],
         select: { playerId: true, wins: true, player: { select: { name: true } } },
       },
       // The rating impact this session had on each player — the value the

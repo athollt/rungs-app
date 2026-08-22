@@ -12,7 +12,16 @@ export default defineConfig({
     // Unit tests are *.test.ts; Playwright owns e2e/*.spec.ts. Keep the two
     // runners from colliding (Vitest's default glob also matches .spec.ts).
     include: ["**/*.test.{ts,tsx}"],
-    exclude: ["node_modules", "e2e", ".next"],
+    // Globs, not bare names: a bare "node_modules" only matches a path equal
+    // to it, so nested package tests were collected and run (938 of them).
+    // .claude holds the agent worktrees, which are copies of this repo and
+    // would otherwise have every test collected a second time.
+    exclude: [
+      "**/node_modules/**",
+      "**/e2e/**",
+      "**/.next/**",
+      "**/.claude/**",
+    ],
   },
   resolve: {
     alias: {

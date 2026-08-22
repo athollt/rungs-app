@@ -54,6 +54,13 @@ export function globalAdminLinks(): NavLink[] {
   ];
 }
 
+// Tools are neither management nor league-scoped: they apply on every route and to
+// every role. Kept out of adminLinksFor/globalAdminLinks so the hamburger's
+// management semantics stay intact — the menu appends these separately (ADR-017).
+export function toolLinks(): NavLink[] {
+  return [{ key: "/timer", href: "/timer", label: "Timer" }];
+}
+
 // The primary (bottom-bar) nav for a role within league `slug`. Public links
 // always show; Submit requires a session. Admin pages live in the hamburger.
 export function navLinksFor(role: Role | undefined, slug: string): NavLink[] {

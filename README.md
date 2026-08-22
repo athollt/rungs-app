@@ -7,6 +7,9 @@ League's ladder, session history, and per-player rating trends are public; signe
 **admin** administers every League, creates Leagues, and assigns scorers. Login is staff-only
 (Google); a non-staff sign-in can request access in-app.
 
+Also hosts a standalone **Timer** at `/timer` — a public, client-only lap stopwatch, unrelated
+to the ladders (ADR-017).
+
 **Live:** https://app.rungs.co.za
 
 Built with Next.js 16 (App Router), TypeScript, Prisma 7 / PostgreSQL, Auth.js v5, Tailwind

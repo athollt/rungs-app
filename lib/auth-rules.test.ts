@@ -83,6 +83,13 @@ describe("authorizeRoute", () => {
     expect(authorizeRoute("/signin", null)).toBe("allow");
   });
 
+  // The Timer (step 30, ADR-017) stores nothing and reads nothing, so there is
+  // nothing to protect — and gating it would bounce an expired session to Google
+  // OAuth on club wifi mid-swim.
+  it("allows the timer through without a session", () => {
+    expect(authorizeRoute("/timer", null)).toBe("allow");
+  });
+
   // /l/{slug} routing (step 21, ADR-013): the proxy gates on route SHAPE only —
   // public league reads need no auth; scorer/admin league surfaces need a session
   // (the per-league grant check happens at the page with the resolved leagueId).

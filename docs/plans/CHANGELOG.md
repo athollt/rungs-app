@@ -2485,3 +2485,168 @@ intake deepening + share from history + draft autosave).
   `lib/league-access.ts`, `components/share-button.tsx`, `components/session-form.tsx`)
   exist in the current commit.
 
+
+---
+
+## Step 30 — Timer: a swimming stopwatch inside Rungs
+
+**Date**: 2026-08-21
+
+### Delivered
+
+- `lib/timer.ts` — pure stopwatch logic over absolute wall-clock timestamps: `formatDuration` (`mm:ss.hh`, rolling to `h:mm:ss.hh`), `elapsedMs`, `lapRows`, `fastestLapIndex`, `restoreOrDiscard` (the 12-hour stale-run rule). Clock-injected, no React, no storage. 14 unit tests.
+- `components/stopwatch.tsx` — the client component, owning only three effects: a `requestAnimationFrame` loop while running (a 1s interval while idle, for the live date/time line), the Screen Wake Lock re-acquired on `visibilitychange`, and `localStorage` (`rungs-timer` for the run, `rungs-timer-title` for the last title).
+- `app/timer/page.tsx` — public route, no Prisma and no `auth()`. Renders as a dynamic route because the root layout reads the session.
+- Behaviour: Start/Stop toggles; Lap gets half the button row (the only button pressed under time pressure) and is disabled while stopped; Stop records the final lap and ends the run in one action, with no resume; Reset needs a confirming second tap and is the only way out of a finished run; the date/time line is live until Start then frozen at the start timestamp; laps are chronological with the fastest highlighted.
+- `lib/nav.ts` — new `toolLinks()` group, appended in `AdminMenu` for any role.
+- `lib/auth-rules.ts` — `/timer` added to `isPublicRoute`.
+- ADR-017 in `DECISIONS.md`; `OVERVIEW.md` directory map, `lib/` modules, auth section and Domain Language; `README.md` intro.
+
+### Deviations from spec
+
+- The step file specified an eslint-disable for `react-hooks/set-state-in-effect` on the mount restore effect (matching `SessionForm`). The rule did not fire there and ESLint flagged the directive as unused, so it was dropped; the explanatory comment stays.
+
+### Incidental fix
+
+- Appending tools means the header hamburger is never empty for a staff user. Previously a SCORER off a league route got no menu at all, and would have been stranded on `/timer` with no way back.
+
+### Validation results
+
+- `npm run build` — passes; `/timer` listed as a dynamic (`ƒ`) route, Serwist service worker bundled as usual.
+- `npm run test` — 275 passed / 45 files, including the 14 new timer tests plus additions to `nav.test.ts` and `auth-rules.test.ts`.
+- `npm run test:e2e` — 60 passed. Two new journeys in `e2e/timer.spec.ts`: a signed-out start/lap/stop/confirm-reset cycle, and an in-progress run restored across a reload.
+- **Pre-existing flake, not introduced here**: `e2e/session-history.spec.ts:69` (the touch-share test from step 28) fails intermittently, roughly half of runs. Verified by stashing all of this step's changes and running the baseline suite twice (one fail, one pass), and it passes reliably in isolation. Left alone; tracked separately.
+
+### Not done (knowingly accepted)
+
+- No separate home-screen icon — the Timer is reached by opening Rungs (ADR-017).
+- Past ten laps the list scrolls, so a screenshot loses the top rows.
+- `/timer` is not precached, so a first-ever offline hit falls back to `/~offline`. Covered by the manual acceptance checks below rather than by an assumption.
+
+### Manual acceptance (post-deploy, on the phone)
+
+1. Airplane mode, open the installed PWA, navigate to Timer — loads and runs.
+2. Start a run, lock the phone, wait, unlock — correct elapsed time, screen stays awake.
+3. Ten laps fit in one screenshot with no scrolling.
+
+---
+
+## Step 30.1 — Timer: pace bars + lap summary
+
+**Date**: 2026-08-22
+
+### Delivered
+
+- **Pace bar** in each lap row, filling the dead space between the Lap and Total columns. Width is the lap's position within the run's own fastest-to-slowest range, so the shape of a set (held pace, or drifted) reads off a screenshot without parsing digits.
+- **Summary strip** below the laps: average, spread, fastest, slowest. Spread is the pacing number — whether the set held together.
+- Lap time bumped to `1.05rem`, Total dropped to `text-xs` muted: the lap is the figure you read, the total is reference.
+- New pure helpers in `lib/timer.ts`: `lapSummary` (null below two laps) and `paceBarPercent`. 6 new unit tests.
+
+### Deviations from spec
+
+- **The pace bar does not use a zero baseline.** Scaling 0-to-slowest was built first and rejected on sight: swim splits cluster in a narrow band, so 37.64s and 44.15s rendered as near-identical bars and the feature was useless. It now scales across the run's own range with a 30% floor. The trade is that a tight set looks dramatic, which is why the summary strip reports the actual spread next to it.
+- **The summary is one 4-across row, not the 2x2 grid** that was mocked. The 2x2 pushed a ten-lap set past a single phone screen, and the screenshot is the archive.
+- `slowestLapMs` was added and then removed within this step - `lapSummary.slowestMs` superseded it before it shipped.
+
+### Known limitation
+
+- The first lap is structurally faster (dive), so the fastest-lap highlight will usually land on lap 1. Deliberately not corrected: excluding lap 1 from the scale is its own distortion. Flagged and accepted.
+
+### Validation results
+
+- `npm run build` — passes, `/timer` still a dynamic route.
+- `npm run test` — 281 passed / 45 files.
+- `npm run lint` — clean.
+- `npx playwright test e2e/timer.spec.ts` — 2 passed.
+- Visual check at 390x844: ten laps plus the summary strip fit one screen with ~150px spare; bars visibly differentiate across a 6.51s spread.
+
+### Note on the test environment
+
+The full `npm run test` picks up a duplicate copy of the suite when a git worktree exists under `.claude/worktrees/` (`.claude` is a symlink, and vitest globs through it) — the same symlink-traversal class of problem as ADR-005. Run `npx vitest run --exclude '**/.claude/**'` while a worktree session is active.
+
+---
+
+## Step 30.2 — Timer: diverging pace bars centred on the median
+
+**Date**: 2026-08-22
+
+### Delivered
+
+- The pace bar is now a **deviation bar**: it grows right in green when a lap beats the reference and left in red when it trails. Reading down the column, green giving way to red is a swimmer fading - the question a screenshot is actually asked weeks later, and one that comparing ten similar bar lengths did not answer.
+- **Centred on the median, not the mean.** A racing dive makes lap 1 structurally faster than any swum lap; a mean is dragged toward it far enough to recolour mid-set laps as "slower than average" when they sit on the swimmer's real pace. On the reference set that shifted the centre from 41.41 to 41.55 and moved laps 6 and 7 from clearly-slow to near-level. The median is robust to any outlier - it is not a dive-specific correction.
+- **2% floor** on any non-zero deviation, so a lap a hundredth off the median cannot render as dead level.
+- Summary strip reports **Median** (the line the bars are drawn from) rather than Average. Fastest and Slowest are tinted to the bar colours, so the strip doubles as the legend.
+- Per-row screen-reader text ("00:02.61 slower than the median") replaces the removed fastest-lap marker, so the bar is no longer information available only to sighted users.
+- `lib/timer.ts`: `lapSummary` now returns `medianMs` + `maxAbsDeviationMs`; `paceBarPercent` replaced by `paceDeviation`. Colours reuse the existing `--chart-4`/`--chart-5` theme tokens rather than introducing new ones.
+
+### Removed
+
+- `fastestLapIndex` and the purple fastest-lap row highlight - the longest green bar is by definition the fastest lap, so the highlight was redundant once the bars diverged. Removed with its tests.
+
+### Deviations from spec
+
+- The mock put "Average" in the summary strip. Shipping median-centred bars next to an average would name a number the bars are not drawn from, so the strip says Median.
+
+### Known limitation
+
+- Direction is inverted against intuition for time: a slower lap is a larger number but draws a shorter-looking bar leftward. Internally consistent and learnable, accepted deliberately.
+- Each bar has half the horizontal resolution of the previous full-width version. Accepted - it is showing deviation, not magnitude.
+- The dive still draws the largest green bar. Not corrected, per the same reasoning as step 30.1.
+
+### Validation results
+
+- `npm run build` - passes, `/timer` still dynamic.
+- `npm run test` - 282 passed / 45 files (`--exclude '**/.claude/**'` while a worktree session is active).
+- `npm run lint` - clean.
+- `npx playwright test e2e/timer.spec.ts` - 2 passed.
+- Visual check at 390x844: ten laps plus the strip fit one screen with ~150px spare; the green-to-red transition at lap 5 is legible at a glance.
+
+---
+
+## Step 30.3 — Timer: centre axis + honest scale for short sets
+
+**Date**: 2026-08-22
+
+Two defects found in phone testing of 30.2, both from the same blind spot: the reference set used to build it had an even lap count and wide variation, so neither case ever appeared.
+
+### Fixed
+
+- **A lap sitting exactly on the median drew nothing**, reading as a failed render rather than as the reference the other bars are measured from. An odd lap count guarantees exactly one such lap, so this showed on most real sets. Now the bar column carries a continuous vertical **axis**, and the lap on the line gets a neutral dot: it visibly rests on the axis instead of being absent.
+- **Two-lap sets were meaningless.** With two laps the median is exactly the midpoint, so the deviations are always equal and opposite, and pure max-normalisation drew one full green and one full red bar whether the laps differed by two seconds or two hundredths. The bar denominator is now floored at **3% of the median** (`barScaleMs`, replacing `maxAbsDeviationMs`), so a tight set draws short bars. Verified both ways: 29.84 vs 29.91 draws ~2% stubs; 29.84 vs 41.20 still fills the width.
+
+The floor also softens the exaggeration flagged as a known trade in 30.1 — a genuinely even set now looks even rather than dramatic.
+
+### Validation results
+
+- `npm run build` — passes, `/timer` still dynamic.
+- `npm run test` — 285 passed / 45 files.
+- `npm run lint` — clean.
+- `npx playwright test e2e/timer.spec.ts` — 2 passed.
+- Visual check at 390x844 across three shapes: a 7-lap set (odd, median lap shows the dot on the axis), two near-identical laps (stubs), two very different laps (full width).
+
+---
+
+## Step 30.4 — Timer: visible deviation column + larger summary
+
+**Date**: 2026-08-22
+
+From testing at a real race (a 100m backstroke, 4 laps).
+
+### Delivered
+
+- **A `+/-` column beside the bar** showing the signed gap from the median ("-1.71", "+1.23", "0.00"), tinted to match the bar. The figure was already in the screen-reader text; this surfaces it. Placed beside the bar rather than inside it: a short bar has no room for a label, and a column keeps every figure on one right edge.
+- **Taller bars** (7px to 13px) and a larger median dot (7px to 9px).
+- New pure `formatDelta` — signed, compact, drops the minutes unless the gap genuinely exceeds one, which on a lap split it rarely does. 3 unit tests.
+- Summary values scaled up to match the lap figures.
+
+### Deviations from spec
+
+- **The summary could not simply take the lap font size.** Four `mm:ss.hh` values on one row is the binding constraint: at a fixed 1.05rem each value needs 81px in an 85px cell with 73px of usable width, so every cell overflowed — measured, not estimated. The size is now `clamp(0.75rem, 4.1vw, 1.05rem)`, with gap and padding tightened. Measured across widths: 360px gives 14.76px, 390px gives 15.99px, and at 430px it reaches 16.8px, exactly matching the laps. No overflow at any of the three, and the page never scrolls horizontally.
+
+### Validation results
+
+- `npm run build` — passes, `/timer` still dynamic.
+- `npm run test` — 288 passed / 45 files.
+- `npm run lint` — clean.
+- `npx playwright test e2e/timer.spec.ts` — 2 passed.
+- Visual check: the real 4-lap race renders correctly, and a 10-lap set with the taller bars and larger stats still fits one 390x844 screen with ~100px spare.

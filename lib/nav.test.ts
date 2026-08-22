@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { adminLinksFor, navLinksFor, slugFromPathname } from "@/lib/nav";
+import {
+  adminLinksFor,
+  globalAdminLinks,
+  navLinksFor,
+  slugFromPathname,
+  toolLinks,
+} from "@/lib/nav";
 
 const SLUG = "bsc-doubles-squash";
 
@@ -66,5 +72,23 @@ describe("adminLinksFor", () => {
       `/l/${SLUG}/admin/sessions`,
       `/l/${SLUG}/admin/settings`,
     ]);
+  });
+});
+
+describe("toolLinks", () => {
+  it("offers the Timer", () => {
+    expect(toolLinks()).toEqual([
+      { key: "/timer", href: "/timer", label: "Timer" },
+    ]);
+  });
+
+  // Tools are appended by the menu, not folded into the management lists — the
+  // hamburger's management semantics stay intact (ADR-017).
+  it("stays out of the management link lists", () => {
+    const managementHrefs = [
+      ...adminLinksFor("ADMIN", SLUG),
+      ...globalAdminLinks(),
+    ].map((l) => l.href);
+    expect(managementHrefs).not.toContain("/timer");
   });
 });
