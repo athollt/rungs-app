@@ -91,8 +91,18 @@ describe("lapSummary", () => {
       spreadMs: 6_510,
       fastestMs: 37_640,
       slowestMs: 44_150,
-      maxAbsDeviationMs: 3_605,
+      // Real variation here, so the scale is the largest deviation, not the floor.
+      barScaleMs: 3_605,
     });
+  });
+
+  // Without the floor a set this tight would still draw full-length bars, because
+  // max-normalisation always makes the biggest deviation fill the width.
+  it("floors the bar scale at 3% of the median for a very even set", () => {
+    const summary = lapSummary(rowsFor([40_000, 40_050]));
+    expect(summary?.medianMs).toBe(40_025);
+    // largest deviation is 25ms, but 3% of the median is 1 200.75ms
+    expect(summary?.barScaleMs).toBeCloseTo(1_200.75, 2);
   });
 
   it("takes the middle value outright when the lap count is odd", () => {
@@ -115,6 +125,38 @@ describe("lapSummary", () => {
 describe("paceDeviation", () => {
   const MEDIAN = 41_545;
   const MAX_ABS = 3_905;
+
+  // The two-lap case: the median is exactly the midpoint, so both laps are always
+  // equidistant from it. Only the floored scale stops a hundredth of a second
+  // rendering as two full-length opposing bars.
+  it("keeps a two-lap set honest when the laps are nearly identical", () => {
+    const rows = lapRows({
+      startedAt: 0,
+      stoppedAt: null,
+      lapMarks: [40_000, 80_050],
+    });
+    const summary = lapSummary(rows)!;
+    const [first, second] = rows.map((r) =>
+      paceDeviation(r.lapMs, summary.medianMs, summary.barScaleMs),
+    );
+    expect(first.side).toBe("faster");
+    expect(second.side).toBe("slower");
+    // 25ms against a 1 200.75ms scale — about 2%, not 100%.
+    expect(first.percent).toBeCloseTo(2.08, 1);
+    expect(second.percent).toBeCloseTo(2.08, 1);
+  });
+
+  it("still fills the width for a two-lap set that genuinely differs", () => {
+    const rows = lapRows({
+      startedAt: 0,
+      stoppedAt: null,
+      lapMarks: [40_000, 90_000],
+    });
+    const summary = lapSummary(rows)!;
+    expect(
+      paceDeviation(rows[1].lapMs, summary.medianMs, summary.barScaleMs).percent,
+    ).toBe(100);
+  });
 
   it("draws a faster lap to the right and a slower lap to the left", () => {
     expect(paceDeviation(37_640, MEDIAN, MAX_ABS)).toEqual({

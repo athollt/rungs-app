@@ -310,13 +310,13 @@ export function Stopwatch() {
                       green block giving way to red is a swimmer fading — the thing
                       you actually want off the screenshot. Direction carries the
                       meaning on its own, so it survives colour blindness. */}
-                  <TableCell className="w-full px-1 py-1">
+                  <TableCell className="relative w-full px-1 py-1">
                     {(() => {
                       if (!summary) return null;
                       const d = paceDeviation(
                         row.lapMs,
                         summary.medianMs,
-                        summary.maxAbsDeviationMs,
+                        summary.barScaleMs,
                       );
                       const bar = (
                         <span
@@ -330,19 +330,35 @@ export function Stopwatch() {
                         />
                       );
                       return (
-                        <span className="flex items-center" aria-hidden={false}>
-                          <span className="border-border flex w-1/2 justify-end border-r">
-                            {d.side === "slower" && bar}
-                          </span>
-                          <span className="flex w-1/2">
-                            {d.side === "faster" && bar}
+                        <>
+                          {/* A continuous axis down the column. Without it a lap
+                              sitting exactly on the median (which an odd lap count
+                              guarantees) looks like a bar that failed to draw,
+                              rather than one resting on the line. */}
+                          <span
+                            aria-hidden
+                            className="bg-border absolute inset-y-0 left-1/2 w-px"
+                          />
+                          <span className="relative flex items-center">
+                            <span className="flex w-1/2 justify-end">
+                              {d.side === "slower" && bar}
+                            </span>
+                            <span className="flex w-1/2">
+                              {d.side === "faster" && bar}
+                            </span>
+                            {d.side === "even" && (
+                              <span
+                                aria-hidden
+                                className="bg-muted-foreground/60 absolute left-1/2 size-[7px] -translate-x-1/2 rounded-full"
+                              />
+                            )}
                           </span>
                           <span className="sr-only">
                             {d.side === "even"
-                              ? "level with the median"
+                              ? "on the median"
                               : `${formatDuration(Math.abs(d.deltaMs))} ${d.side} than the median`}
                           </span>
-                        </span>
+                        </>
                       );
                     })()}
                   </TableCell>

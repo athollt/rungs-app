@@ -2600,3 +2600,26 @@ The full `npm run test` picks up a duplicate copy of the suite when a git worktr
 - `npm run lint` - clean.
 - `npx playwright test e2e/timer.spec.ts` - 2 passed.
 - Visual check at 390x844: ten laps plus the strip fit one screen with ~150px spare; the green-to-red transition at lap 5 is legible at a glance.
+
+---
+
+## Step 30.3 — Timer: centre axis + honest scale for short sets
+
+**Date**: 2026-08-22
+
+Two defects found in phone testing of 30.2, both from the same blind spot: the reference set used to build it had an even lap count and wide variation, so neither case ever appeared.
+
+### Fixed
+
+- **A lap sitting exactly on the median drew nothing**, reading as a failed render rather than as the reference the other bars are measured from. An odd lap count guarantees exactly one such lap, so this showed on most real sets. Now the bar column carries a continuous vertical **axis**, and the lap on the line gets a neutral dot: it visibly rests on the axis instead of being absent.
+- **Two-lap sets were meaningless.** With two laps the median is exactly the midpoint, so the deviations are always equal and opposite, and pure max-normalisation drew one full green and one full red bar whether the laps differed by two seconds or two hundredths. The bar denominator is now floored at **3% of the median** (`barScaleMs`, replacing `maxAbsDeviationMs`), so a tight set draws short bars. Verified both ways: 29.84 vs 29.91 draws ~2% stubs; 29.84 vs 41.20 still fills the width.
+
+The floor also softens the exaggeration flagged as a known trade in 30.1 — a genuinely even set now looks even rather than dramatic.
+
+### Validation results
+
+- `npm run build` — passes, `/timer` still dynamic.
+- `npm run test` — 285 passed / 45 files.
+- `npm run lint` — clean.
+- `npx playwright test e2e/timer.spec.ts` — 2 passed.
+- Visual check at 390x844 across three shapes: a 7-lap set (odd, median lap shows the dot on the axis), two near-identical laps (stubs), two very different laps (full width).

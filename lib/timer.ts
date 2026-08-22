@@ -62,9 +62,19 @@ export interface LapSummary {
   spreadMs: number;
   fastestMs: number;
   slowestMs: number;
-  // Largest absolute distance from the median — the scale the bars divide by.
-  maxAbsDeviationMs: number;
+  // What the bars divide by. Normally the largest distance from the median, so a
+  // set uses the full width — but floored at a fraction of the median, because
+  // pure max-normalisation has no sense of scale: two laps a hundredth apart
+  // would each draw a full-length bar in opposite directions and imply a gulf
+  // that isn't there. The floor keeps a tight set drawing short bars. It bites
+  // hardest at two laps, where the median is exactly the midpoint and the two
+  // deviations are always equal and opposite.
+  barScaleMs: number;
 }
+
+// The denominator floor, as a share of the median lap. Below this much variation
+// a set is "even" and should look it.
+const PACE_SCALE_MIN_FRACTION = 0.03;
 
 function median(values: number[]): number {
   const sorted = [...values].sort((a, b) => a - b);
@@ -83,12 +93,15 @@ export function lapSummary(rows: LapRow[]): LapSummary | null {
   const fastestMs = Math.min(...times);
   const slowestMs = Math.max(...times);
   const medianMs = median(times);
+  const maxAbsDeviation = Math.max(
+    ...times.map((t) => Math.abs(t - medianMs)),
+  );
   return {
     medianMs,
     spreadMs: slowestMs - fastestMs,
     fastestMs,
     slowestMs,
-    maxAbsDeviationMs: Math.max(...times.map((t) => Math.abs(t - medianMs))),
+    barScaleMs: Math.max(maxAbsDeviation, medianMs * PACE_SCALE_MIN_FRACTION),
   };
 }
 
@@ -114,13 +127,16 @@ export interface PaceDeviation {
 export function paceDeviation(
   lapMs: number,
   medianMs: number,
-  maxAbsDeviationMs: number,
+  barScaleMs: number,
 ): PaceDeviation {
   const deltaMs = lapMs - medianMs;
-  if (deltaMs === 0 || maxAbsDeviationMs <= 0) {
+  // An odd lap count always puts one lap exactly on the median. It draws no bar,
+  // so the row must show the centre marker instead — otherwise it reads as a
+  // failed render rather than as the reference the other bars are measured from.
+  if (deltaMs === 0 || barScaleMs <= 0) {
     return { side: "even", percent: 0, deltaMs: 0 };
   }
-  const scaled = (Math.abs(deltaMs) / maxAbsDeviationMs) * 100;
+  const scaled = (Math.abs(deltaMs) / barScaleMs) * 100;
   return {
     side: deltaMs < 0 ? "faster" : "slower",
     percent: Math.max(PACE_BAR_MIN_PERCENT, scaled),
