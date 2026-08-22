@@ -2653,11 +2653,9 @@ From testing at a real race (a 100m backstroke, 4 laps).
 
 ---
 
-## Step 30a — Timer entry time
+## Step 30.5 — Timer entry time
 
 **Date**: 2026-08-22
-
-Numbering note: the earlier timer increments are logged as 30.1-30.4; this one is 30a as requested. Mixed, but recorded so the sequence reads clearly later.
 
 ### Delivered
 

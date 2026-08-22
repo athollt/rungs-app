@@ -1,4 +1,4 @@
-# Step 30a: Timer entry time
+# Step 30.5: Timer entry time
 
 ## Objective
 
@@ -6,8 +6,7 @@ Capture an **entry time** (the seed time a swimmer is entered with for a race) a
 
 ## Context
 
-- Read first: `DECISIONS.md` (ADR-017), `steps/step-30-timer.md`, and the step 30.1-30.4 entries in `CHANGELOG.md`.
-- Naming note: the earlier timer increments are logged as **30.1-30.4**; this one is **30a** as requested. Mixed, but recorded here so the sequence is not confusing later.
+- Read first: `DECISIONS.md` (ADR-017), `steps/step-30-timer.md`, and the step 30.1-30.4 entries in `CHANGELOG.md` — this continues that sequence.
 - The subtitle slot in `PageShell` currently takes the plain `clockLine` string. It becomes a node with the timestamp on the left and the entry field on the right.
 - `formatDuration` is for elapsed durations and always pads to `mm:ss.hh`. Entry time needs its own formatter because it is *typed*, and a half-typed value has to render sensibly.
 
@@ -58,6 +57,6 @@ npm run test:e2e
 ## Completion
 
 1. Update `CHANGELOG.md`.
-2. Mark step 30a complete in `RUNGS-PLAN.md`.
-3. Commit `step-30a: timer entry time`.
+2. Mark step 30.5 complete in `RUNGS-PLAN.md`.
+3. Commit `step-30.5: timer entry time`.
 4. Push `at-wip` — it lands on the open PR #11.
