@@ -52,52 +52,80 @@ export function lapRows(run: TimerRun): LapRow[] {
   }));
 }
 
-// The 1-based index of the quickest lap, or null when there is nothing to compare
-// against (a single lap is not "fastest"). Ties keep the earliest lap.
-export function fastestLapIndex(rows: LapRow[]): number | null {
-  if (rows.length < 2) return null;
-  return rows.reduce((best, row) => (row.lapMs < best.lapMs ? row : best)).index;
-}
-
 export interface LapSummary {
-  averageMs: number;
+  // The pace bars centre on the MEDIAN, not the mean. A racing dive makes lap 1
+  // structurally faster than any swum lap, and a mean is dragged down by it —
+  // enough to recolour mid-set laps as "slower than average" when they are level
+  // with the swimmer's actual pace. The median is simply robust to that outlier;
+  // it is not a dive-specific correction.
+  medianMs: number;
   spreadMs: number;
   fastestMs: number;
   slowestMs: number;
+  // Largest absolute distance from the median — the scale the bars divide by.
+  maxAbsDeviationMs: number;
 }
 
-// Null below two laps — an average of one lap is just that lap, and a spread of
-// zero says nothing. Spread (slowest minus fastest) is the pacing number: it says
-// whether the set held together or came apart.
+function median(values: number[]): number {
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 1
+    ? sorted[mid]
+    : Math.round((sorted[mid - 1] + sorted[mid]) / 2);
+}
+
+// Null below two laps — one lap has nothing to be fast or slow relative to.
+// Spread (slowest minus fastest) is the pacing number: whether the set held
+// together or came apart.
 export function lapSummary(rows: LapRow[]): LapSummary | null {
   if (rows.length < 2) return null;
   const times = rows.map((r) => r.lapMs);
   const fastestMs = Math.min(...times);
   const slowestMs = Math.max(...times);
+  const medianMs = median(times);
   return {
-    averageMs: Math.round(times.reduce((a, b) => a + b, 0) / times.length),
+    medianMs,
     spreadMs: slowestMs - fastestMs,
     fastestMs,
     slowestMs,
+    maxAbsDeviationMs: Math.max(...times.map((t) => Math.abs(t - medianMs))),
   };
 }
 
-// The pace bar's floor, as a percentage. The bar is scaled across the run's own
-// range (fastest → slowest), NOT from zero: swim splits cluster in a narrow band,
-// so a zero baseline renders 37s and 44s as near-identical bars and the shape of
-// the set becomes unreadable. The trade is that a tight set looks dramatic, which
-// is why the summary strip reports the actual spread alongside it.
-const PACE_BAR_FLOOR = 30;
+// Smallest visible bar, as a percentage of the half-width. Without it a lap a
+// tenth off the median renders as a hairline indistinguishable from dead level.
+const PACE_BAR_MIN_PERCENT = 2;
 
-export function paceBarPercent(
+export interface PaceDeviation {
+  // Which way the bar grows from the centre line. "faster" draws right, "slower"
+  // draws left — direction carries the meaning independently of colour, so the
+  // red/green reading survives colour blindness.
+  side: "faster" | "slower" | "even";
+  // Share of the half-width, 0-100.
+  percent: number;
+  // Signed distance from the median; negative is faster.
+  deltaMs: number;
+}
+
+// A lap as its distance from the median, rather than its absolute length. This
+// makes the SHAPE of a set legible at a glance — a green block giving way to red
+// down the page is a swimmer fading — which comparing ten similar bar lengths
+// does not. The cost is half the horizontal resolution per bar.
+export function paceDeviation(
   lapMs: number,
-  fastestMs: number,
-  slowestMs: number,
-): number {
-  const span = slowestMs - fastestMs;
-  if (span <= 0) return 100;
-  const ratio = (lapMs - fastestMs) / span;
-  return PACE_BAR_FLOOR + ratio * (100 - PACE_BAR_FLOOR);
+  medianMs: number,
+  maxAbsDeviationMs: number,
+): PaceDeviation {
+  const deltaMs = lapMs - medianMs;
+  if (deltaMs === 0 || maxAbsDeviationMs <= 0) {
+    return { side: "even", percent: 0, deltaMs: 0 };
+  }
+  const scaled = (Math.abs(deltaMs) / maxAbsDeviationMs) * 100;
+  return {
+    side: deltaMs < 0 ? "faster" : "slower",
+    percent: Math.max(PACE_BAR_MIN_PERCENT, scaled),
+    deltaMs,
+  };
 }
 
 // Aged against startedAt, not stoppedAt: a run left ticking overnight must be

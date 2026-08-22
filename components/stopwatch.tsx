@@ -15,11 +15,10 @@ import {
 import { cn } from "@/lib/utils";
 import {
   elapsedMs,
-  fastestLapIndex,
   formatDuration,
   lapRows,
   lapSummary,
-  paceBarPercent,
+  paceDeviation,
   restoreOrDiscard,
   type TimerRun,
 } from "@/lib/timer";
@@ -213,7 +212,6 @@ export function Stopwatch() {
   }
 
   const rows = run ? lapRows(run) : [];
-  const fastest = fastestLapIndex(rows);
   const summary = lapSummary(rows);
   const elapsed = run && now !== null ? elapsedMs(run, now) : 0;
   // Live until Start, then frozen at the start timestamp: a screenshot should
@@ -304,39 +302,49 @@ export function Stopwatch() {
                   <TableCell className="text-muted-foreground px-2 py-1 text-xs">
                     {row.index}
                   </TableCell>
-                  <TableCell
-                    className={cn(
-                      "px-2 py-1 font-mono text-[1.05rem] tabular-nums",
-                      row.index === fastest && "text-primary font-semibold",
-                    )}
-                  >
+                  <TableCell className="px-2 py-1 font-mono text-[1.05rem] tabular-nums">
                     {formatDuration(row.lapMs)}
-                    {row.index === fastest && (
-                      <span className="sr-only"> (fastest lap)</span>
-                    )}
                   </TableCell>
-                  {/* Pace bar: lap time as a share of the slowest lap in this run,
-                      so the shape of the set (held pace, or came apart) reads at a
-                      glance off the screenshot without parsing a column of digits.
-                      Comparative, not absolute — the scale moves with the run. */}
-                  <TableCell className="w-full px-2 py-1" aria-hidden>
-                    <span
-                      className={cn(
-                        "block h-[7px] rounded-full",
-                        row.index === fastest ? "bg-primary" : "bg-primary/35",
-                      )}
-                      style={{
-                        width: `${
-                          summary
-                            ? paceBarPercent(
-                                row.lapMs,
-                                summary.fastestMs,
-                                summary.slowestMs,
-                              )
-                            : 100
-                        }%`,
-                      }}
-                    />
+                  {/* Pace bar: distance from the median, growing right (green) when
+                      faster and left (red) when slower. Reading down the column, a
+                      green block giving way to red is a swimmer fading — the thing
+                      you actually want off the screenshot. Direction carries the
+                      meaning on its own, so it survives colour blindness. */}
+                  <TableCell className="w-full px-1 py-1">
+                    {(() => {
+                      if (!summary) return null;
+                      const d = paceDeviation(
+                        row.lapMs,
+                        summary.medianMs,
+                        summary.maxAbsDeviationMs,
+                      );
+                      const bar = (
+                        <span
+                          className={cn(
+                            "block h-[7px]",
+                            d.side === "faster"
+                              ? "bg-chart-4 rounded-r-full"
+                              : "bg-chart-5 rounded-l-full",
+                          )}
+                          style={{ width: `${d.percent}%` }}
+                        />
+                      );
+                      return (
+                        <span className="flex items-center" aria-hidden={false}>
+                          <span className="border-border flex w-1/2 justify-end border-r">
+                            {d.side === "slower" && bar}
+                          </span>
+                          <span className="flex w-1/2">
+                            {d.side === "faster" && bar}
+                          </span>
+                          <span className="sr-only">
+                            {d.side === "even"
+                              ? "level with the median"
+                              : `${formatDuration(Math.abs(d.deltaMs))} ${d.side} than the median`}
+                          </span>
+                        </span>
+                      );
+                    })()}
                   </TableCell>
                   <TableCell className="text-muted-foreground px-2 py-1 text-right font-mono text-xs tabular-nums">
                     {formatDuration(row.totalMs)}
@@ -352,7 +360,9 @@ export function Stopwatch() {
           {summary && (
             <dl className="mt-3 grid grid-cols-4 gap-1.5">
               {[
-                { label: "Average", value: summary.averageMs },
+                // Median, not average — it is the line the bars above are drawn
+                // from, so the strip has to name the same number.
+                { label: "Median", value: summary.medianMs },
                 { label: "Spread", value: summary.spreadMs },
                 { label: "Fastest", value: summary.fastestMs },
                 { label: "Slowest", value: summary.slowestMs },
@@ -364,7 +374,10 @@ export function Stopwatch() {
                   <dd
                     className={cn(
                       "font-mono text-[0.8rem] tabular-nums",
-                      stat.label === "Fastest" && "text-primary",
+                      // Matches the bar colours, so the strip doubles as the
+                      // legend and no separate key is needed.
+                      stat.label === "Fastest" && "text-chart-4",
+                      stat.label === "Slowest" && "text-chart-5",
                     )}
                   >
                     {formatDuration(stat.value)}

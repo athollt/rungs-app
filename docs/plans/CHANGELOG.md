@@ -2563,3 +2563,40 @@ intake deepening + share from history + draft autosave).
 ### Note on the test environment
 
 The full `npm run test` picks up a duplicate copy of the suite when a git worktree exists under `.claude/worktrees/` (`.claude` is a symlink, and vitest globs through it) — the same symlink-traversal class of problem as ADR-005. Run `npx vitest run --exclude '**/.claude/**'` while a worktree session is active.
+
+---
+
+## Step 30.2 — Timer: diverging pace bars centred on the median
+
+**Date**: 2026-08-22
+
+### Delivered
+
+- The pace bar is now a **deviation bar**: it grows right in green when a lap beats the reference and left in red when it trails. Reading down the column, green giving way to red is a swimmer fading - the question a screenshot is actually asked weeks later, and one that comparing ten similar bar lengths did not answer.
+- **Centred on the median, not the mean.** A racing dive makes lap 1 structurally faster than any swum lap; a mean is dragged toward it far enough to recolour mid-set laps as "slower than average" when they sit on the swimmer's real pace. On the reference set that shifted the centre from 41.41 to 41.55 and moved laps 6 and 7 from clearly-slow to near-level. The median is robust to any outlier - it is not a dive-specific correction.
+- **2% floor** on any non-zero deviation, so a lap a hundredth off the median cannot render as dead level.
+- Summary strip reports **Median** (the line the bars are drawn from) rather than Average. Fastest and Slowest are tinted to the bar colours, so the strip doubles as the legend.
+- Per-row screen-reader text ("00:02.61 slower than the median") replaces the removed fastest-lap marker, so the bar is no longer information available only to sighted users.
+- `lib/timer.ts`: `lapSummary` now returns `medianMs` + `maxAbsDeviationMs`; `paceBarPercent` replaced by `paceDeviation`. Colours reuse the existing `--chart-4`/`--chart-5` theme tokens rather than introducing new ones.
+
+### Removed
+
+- `fastestLapIndex` and the purple fastest-lap row highlight - the longest green bar is by definition the fastest lap, so the highlight was redundant once the bars diverged. Removed with its tests.
+
+### Deviations from spec
+
+- The mock put "Average" in the summary strip. Shipping median-centred bars next to an average would name a number the bars are not drawn from, so the strip says Median.
+
+### Known limitation
+
+- Direction is inverted against intuition for time: a slower lap is a larger number but draws a shorter-looking bar leftward. Internally consistent and learnable, accepted deliberately.
+- Each bar has half the horizontal resolution of the previous full-width version. Accepted - it is showing deviation, not magnitude.
+- The dive still draws the largest green bar. Not corrected, per the same reasoning as step 30.1.
+
+### Validation results
+
+- `npm run build` - passes, `/timer` still dynamic.
+- `npm run test` - 282 passed / 45 files (`--exclude '**/.claude/**'` while a worktree session is active).
+- `npm run lint` - clean.
+- `npx playwright test e2e/timer.spec.ts` - 2 passed.
+- Visual check at 390x844: ten laps plus the strip fit one screen with ~150px spare; the green-to-red transition at lap 5 is legible at a glance.

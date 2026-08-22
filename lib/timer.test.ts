@@ -2,11 +2,10 @@ import { describe, it, expect } from "vitest";
 import {
   STALE_RUN_MS,
   elapsedMs,
-  fastestLapIndex,
   formatDuration,
   lapRows,
   lapSummary,
-  paceBarPercent,
+  paceDeviation,
   restoreOrDiscard,
   type TimerRun,
 } from "@/lib/timer";
@@ -70,27 +69,6 @@ describe("lapRows", () => {
   });
 });
 
-describe("fastestLapIndex", () => {
-  const startedAt = 0;
-  const rowsFor = (marks: number[]) =>
-    lapRows({ startedAt, stoppedAt: null, lapMarks: marks });
-
-  it("is null with fewer than two laps", () => {
-    expect(fastestLapIndex([])).toBeNull();
-    expect(fastestLapIndex(rowsFor([5_000]))).toBeNull();
-  });
-
-  it("returns the 1-based index of the quickest lap", () => {
-    // laps of 5.0s, 3.0s, 4.0s
-    expect(fastestLapIndex(rowsFor([5_000, 8_000, 12_000]))).toBe(2);
-  });
-
-  it("keeps the earliest lap on a tie", () => {
-    // laps of 3.0s, 3.0s
-    expect(fastestLapIndex(rowsFor([3_000, 6_000]))).toBe(1);
-  });
-});
-
 describe("lapSummary", () => {
   const rowsFor = (deltas: number[]) => {
     let t = 0;
@@ -106,33 +84,76 @@ describe("lapSummary", () => {
     expect(lapSummary(rowsFor([41_220]))).toBeNull();
   });
 
-  it("reports average, spread, fastest and slowest", () => {
+  it("reports median, spread, fastest, slowest and the bar scale", () => {
+    // sorted: 37 640 · 39 870 · 41 220 · 44 150 → median = mean of the middle two
     expect(lapSummary(rowsFor([41_220, 39_870, 37_640, 44_150]))).toEqual({
-      averageMs: 40_720,
+      medianMs: 40_545,
       spreadMs: 6_510,
       fastestMs: 37_640,
       slowestMs: 44_150,
+      maxAbsDeviationMs: 3_605,
     });
   });
 
-  it("rounds a fractional average to whole milliseconds", () => {
-    expect(lapSummary(rowsFor([1_000, 1_001]))?.averageMs).toBe(1_001);
+  it("takes the middle value outright when the lap count is odd", () => {
+    expect(lapSummary(rowsFor([3_000, 1_000, 2_000]))?.medianMs).toBe(2_000);
+  });
+
+  // The median is the point of this centring: a dive makes lap 1 an outlier, and
+  // a mean would be dragged toward it. Here the mean is 4 250 and the median 2 000.
+  it("is not dragged by a single fast outlier the way a mean would be", () => {
+    expect(lapSummary(rowsFor([100, 2_000, 2_100, 12_800]))?.medianMs).toBe(
+      2_050,
+    );
+  });
+
+  it("rounds a fractional median to whole milliseconds", () => {
+    expect(lapSummary(rowsFor([1_000, 1_001]))?.medianMs).toBe(1_001);
   });
 });
 
-describe("paceBarPercent", () => {
-  it("puts the fastest lap at the floor and the slowest at full width", () => {
-    expect(paceBarPercent(37_640, 37_640, 44_150)).toBe(30);
-    expect(paceBarPercent(44_150, 37_640, 44_150)).toBe(100);
+describe("paceDeviation", () => {
+  const MEDIAN = 41_545;
+  const MAX_ABS = 3_905;
+
+  it("draws a faster lap to the right and a slower lap to the left", () => {
+    expect(paceDeviation(37_640, MEDIAN, MAX_ABS)).toEqual({
+      side: "faster",
+      percent: 100,
+      deltaMs: -3_905,
+    });
+    const slow = paceDeviation(44_150, MEDIAN, MAX_ABS);
+    expect(slow.side).toBe("slower");
+    expect(slow.deltaMs).toBe(2_605);
+    expect(slow.percent).toBeCloseTo(66.71, 1);
   });
 
-  it("places a mid lap proportionally between them", () => {
-    expect(paceBarPercent(40_895, 37_640, 44_150)).toBeCloseTo(65, 5);
+  it("reports a lap sitting exactly on the median as even, with no bar", () => {
+    expect(paceDeviation(MEDIAN, MEDIAN, MAX_ABS)).toEqual({
+      side: "even",
+      percent: 0,
+      deltaMs: 0,
+    });
   });
 
-  // Every lap identical (or a single lap) has no range to scale across.
-  it("is full width when there is no spread", () => {
-    expect(paceBarPercent(40_000, 40_000, 40_000)).toBe(100);
+  // A hundredth off the median must still read as off it, not as dead level.
+  it("floors a tiny deviation so it does not vanish", () => {
+    // 50 of 3 905 is 1.28%, below the floor.
+    const tiny = paceDeviation(MEDIAN + 50, MEDIAN, MAX_ABS);
+    expect(tiny.side).toBe("slower");
+    expect(tiny.percent).toBe(2);
+  });
+
+  it("leaves a deviation already above the floor unclamped", () => {
+    // 200 of 3 905 is 5.12%.
+    expect(paceDeviation(MEDIAN + 200, MEDIAN, MAX_ABS).percent).toBeCloseTo(
+      5.12,
+      2,
+    );
+  });
+
+  it("treats a set with no deviation at all as even", () => {
+    expect(paceDeviation(40_000, 40_000, 0).side).toBe("even");
   });
 });
 
